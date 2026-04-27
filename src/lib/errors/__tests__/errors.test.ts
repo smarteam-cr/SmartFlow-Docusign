@@ -1,5 +1,9 @@
 import { describe, expect, test } from '@jest/globals';
 import { AppError } from '../AppError.js';
+import { ValidationError } from '../ValidationError.js';
+import { NotFoundError } from '../NotFoundError.js';
+import { ExternalServiceError } from '../ExternalServiceError.js';
+import { ConflictError } from '../ConflictError.js';
 
 describe('AppError', () => {
   test('captures code, httpStatus, message, and details', () => {
@@ -20,5 +24,35 @@ describe('AppError', () => {
   test('details is undefined when not provided', () => {
     const err = new AppError('X', 500, 'msg');
     expect(err.details).toBeUndefined();
+  });
+});
+
+describe('ValidationError', () => {
+  test('has httpStatus 422', () => {
+    const err = new ValidationError('FOO', 'msg');
+    expect(err.httpStatus).toBe(422);
+    expect(err.code).toBe('FOO');
+    expect(err).toBeInstanceOf(AppError);
+  });
+});
+
+describe('NotFoundError', () => {
+  test('has httpStatus 404', () => {
+    const err = new NotFoundError('FOO_NOT_FOUND', 'msg');
+    expect(err.httpStatus).toBe(404);
+  });
+});
+
+describe('ExternalServiceError', () => {
+  test('has httpStatus 502', () => {
+    const err = new ExternalServiceError('FOO_UNAVAILABLE', 'msg');
+    expect(err.httpStatus).toBe(502);
+  });
+});
+
+describe('ConflictError', () => {
+  test('has httpStatus 409', () => {
+    const err = new ConflictError('FOO_CONFLICT', 'msg');
+    expect(err.httpStatus).toBe(409);
   });
 });
