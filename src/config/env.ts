@@ -32,7 +32,9 @@ export function parseEnv(source: Record<string, string | undefined>): Env {
 export function loadEnv(): Env {
   const result = envSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('❌ Invalid environment variables:');
+    // Pino isn't initialized yet at boot — fall back to console.error for env failures.
+    // Plain text (no emoji) for terminal/log-aggregator portability.
+    console.error('[ERROR] Invalid environment variables:');
     for (const issue of result.error.issues) {
       console.error(`  - ${issue.path.join('.')}: ${issue.message}`);
     }
