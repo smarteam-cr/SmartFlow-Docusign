@@ -33,6 +33,9 @@ interface CachedToken {
 export function createJwtAuthClient(config: JwtAuthClientConfig): JwtAuthClient {
   const normalizedKey = config.privateKey.replace(/\\n/g, '\n');
   let cached: CachedToken | null = null;
+  // In-flight promise: when a refresh is already underway, concurrent callers
+  // share that promise instead of firing duplicate OAuth requests.
+  let inflight: Promise<CachedToken> | null = null;
 
   async function requestNewToken(): Promise<CachedToken> {
     const nowSec = Math.floor(Date.now() / 1000);
@@ -116,7 +119,12 @@ export function createJwtAuthClient(config: JwtAuthClientConfig): JwtAuthClient 
       if (cached && cached.expiresAt - TOKEN_REFRESH_BUFFER_SECONDS > nowSec) {
         return cached.token;
       }
-      cached = await requestNewToken();
+      if (!inflight) {
+        inflight = requestNewToken().finally(() => {
+          inflight = null;
+        });
+      }
+      cached = await inflight;
       return cached.token;
     },
   };
