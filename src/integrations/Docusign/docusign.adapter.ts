@@ -1,0 +1,217 @@
+import {
+  NotFoundError,
+  ValidationError,
+  ExternalServiceError,
+} from '../../lib/errors/index.js';
+import { createJwtAuthClient, type JwtAuthClient } from './docusign.auth.js';
+
+const DOCUSIGN_TIMEOUT_MS = 15_000;
+
+export interface TemplateSummary {
+  id: string;
+  name: string;
+}
+
+export interface EnvelopeSigner {
+  name: string;
+  email: string;
+  roleName: string;
+}
+
+export interface SendEnvelopeInput {
+  templateId: string;
+  signer: EnvelopeSigner;
+  prefillTabs: Record<string, string>;
+}
+
+export interface SendEnvelopeResult {
+  envelopeId: string;
+  status: string;
+}
+
+export interface DocusignAdapter {
+  /**
+   * Lists all templates available in the DocuSign account.
+   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
+   */
+  listTemplates(): Promise<TemplateSummary[]>;
+
+  /**
+   * Returns the first signer roleName defined on the template.
+   * @throws NotFoundError(TEMPLATE_NOT_FOUND)
+   * @throws ValidationError(TEMPLATE_HAS_NO_ROLES)
+   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
+   */
+  getFirstRoleName(templateId: string): Promise<string>;
+
+  /**
+   * Creates and sends an envelope from a template.
+   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
+   */
+  sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult>;
+}
+
+export interface DocusignAdapterConfig {
+  clientId: string;
+  userId: string;
+  privateKey: string;
+  accountId: string;
+  basePath: string;
+  /** Optional: inject a custom auth client (for tests or future composition). */
+  authClient?: JwtAuthClient;
+}
+
+export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAdapter {
+  const auth =
+    config.authClient ??
+    createJwtAuthClient({
+      clientId: config.clientId,
+      userId: config.userId,
+      privateKey: config.privateKey,
+    });
+
+  const accountUrl = `${config.basePath}/restapi/v2.1/accounts/${encodeURIComponent(config.accountId)}`;
+
+  async function docusignFetch(
+    url: string,
+    init: RequestInit & { jsonBody?: unknown }
+  ): Promise<Response> {
+    const accessToken = await auth.getAccessToken();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      ...((init.headers as Record<string, string>) ?? {}),
+    };
+
+    let body: string | undefined;
+    if (init.jsonBody !== undefined) {
+      headers['Content-Type'] = 'application/json';
+      body = JSON.stringify(init.jsonBody);
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), DOCUSIGN_TIMEOUT_MS);
+
+    try {
+      return await fetch(url, {
+        method: init.method ?? 'GET',
+        headers,
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      throw new ExternalServiceError(
+        'DOCUSIGN_UNAVAILABLE',
+        'No se pudo contactar a DocuSign',
+        { cause: err instanceof Error ? err.message : String(err) }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  return {
+    async listTemplates(): Promise<TemplateSummary[]> {
+      const url = `${accountUrl}/templates`;
+      const res = await docusignFetch(url, { method: 'GET' });
+
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          `DocuSign respondió ${res.status} al listar templates`,
+          { status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        envelopeTemplates?: Array<{ templateId?: string; name?: string }>;
+      };
+
+      return (body.envelopeTemplates ?? [])
+        .filter((t) => t.templateId && t.name)
+        .map((t) => ({ id: t.templateId!, name: t.name! }));
+    },
+
+    async getFirstRoleName(templateId: string): Promise<string> {
+      const url = `${accountUrl}/templates/${encodeURIComponent(templateId)}`;
+      const res = await docusignFetch(url, { method: 'GET' });
+
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'TEMPLATE_NOT_FOUND',
+          `Template ${templateId} no existe en DocuSign`,
+          { templateId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          `DocuSign respondió ${res.status} al leer el template`,
+          { templateId, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        recipients?: { signers?: Array<{ roleName?: string }> };
+      };
+
+      const firstRoleName = body.recipients?.signers?.[0]?.roleName;
+      if (!firstRoleName) {
+        throw new ValidationError(
+          'TEMPLATE_HAS_NO_ROLES',
+          `Template ${templateId} no tiene roles de firmante definidos`,
+          { templateId }
+        );
+      }
+
+      return firstRoleName;
+    },
+
+    async sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult> {
+      const url = `${accountUrl}/envelopes`;
+
+      const textTabs = Object.entries(input.prefillTabs).map(([tabLabel, value]) => ({
+        tabLabel,
+        value,
+      }));
+
+      const requestBody = {
+        templateId: input.templateId,
+        templateRoles: [
+          {
+            roleName: input.signer.roleName,
+            name: input.signer.name,
+            email: input.signer.email,
+            tabs: { textTabs },
+          },
+        ],
+        status: 'sent',
+      };
+
+      const res = await docusignFetch(url, { method: 'POST', jsonBody: requestBody });
+
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => '');
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          `DocuSign respondió ${res.status} al enviar el envelope`,
+          { status: res.status, body: errBody.slice(0, 500) }
+        );
+      }
+
+      const body = (await res.json()) as { envelopeId?: string; status?: string };
+      if (!body.envelopeId) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          'DocuSign no devolvió envelopeId en la respuesta',
+          { response: JSON.stringify(body).slice(0, 200) }
+        );
+      }
+
+      return {
+        envelopeId: body.envelopeId,
+        status: body.status ?? 'sent',
+      };
+    },
+  };
+}
