@@ -22,6 +22,7 @@ export function registerErrorHandler(fastify: FastifyInstance): void {
           error: 'VALIDATION_ERROR',
           message: 'Request inválido',
           details: error.validation,
+          requestId: request.id,
         });
       }
 
@@ -32,6 +33,7 @@ export function registerErrorHandler(fastify: FastifyInstance): void {
           error: error.code,
           message: error.message,
           details: error.details,
+          requestId: request.id,
         });
       }
 
@@ -40,6 +42,7 @@ export function registerErrorHandler(fastify: FastifyInstance): void {
       return reply.status(500).send({
         error: 'INTERNAL_ERROR',
         message: 'Algo salió mal procesando la solicitud',
+        requestId: request.id,
       });
     }
   );

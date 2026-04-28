@@ -31,6 +31,20 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   const fastify = Fastify({
     logger: {
       level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+      // Redact sensitive paths from any log line (defensive against secrets
+      // leaking into 5xx traces, especially around HubSpot/DocuSign auth).
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'err.config.headers.authorization',
+          'err.request.headers.authorization',
+          '*.access_token',
+          '*.privateKey',
+          '*.DOCUSIGN_PRIVATE_KEY',
+          '*.HUBSPOT_ACCESS_TOKEN',
+        ],
+        censor: '[REDACTED]',
+      },
     },
   }).withTypeProvider<ZodTypeProvider>();
 
