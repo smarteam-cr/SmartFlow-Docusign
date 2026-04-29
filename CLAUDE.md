@@ -98,8 +98,10 @@ Si un cambio te hace dudar de esta regla, **abre el spec en §4.2 y verifica ant
 // integrations/HS/index.ts
 export function createHubSpotAdapter(config: { accessToken: string }) {
   return {
-    async getDealPrimaryContact(dealId: string): Promise<ContactInfo> {
-      // mugre HTTP encapsulada aquí dentro
+    async getDealContacts(dealId: string): Promise<Contact[]> {
+      // mugre HTTP encapsulada aquí dentro:
+      // 1) v4 associations → contact IDs
+      // 2) v3 batch/read → propiedades de todos. Filtra los sin email.
     }
   };
 }
@@ -115,7 +117,7 @@ export function createEnvelopesService(deps: {
   templateMapping: TemplateMappingResolver;
 }) {
   return {
-    async sendFromTemplate(input: { dealId: string; templateId: string }) { /* ... */ }
+    async sendFromTemplate(input: { dealId: string; templateId: string; contactId: string }) { /* ... */ }
   };
 }
 ```
