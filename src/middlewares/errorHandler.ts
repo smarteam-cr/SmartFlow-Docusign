@@ -1,6 +1,14 @@
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../lib/errors/index.js';
 
+function isValidationError(err: FastifyError): boolean {
+  return (
+    Boolean(err.validation) ||
+    err.code === 'FST_ERR_VALIDATION' ||
+    err.name === 'ZodError'
+  );
+}
+
 /**
  * Registers a global error handler on the given Fastify instance.
  *
@@ -16,12 +24,12 @@ export function registerErrorHandler(fastify: FastifyInstance): void {
   fastify.setErrorHandler(
     (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => {
       // 1) Schema validation failures from Fastify (zod via type-provider)
-      if (error.validation) {
+      if (isValidationError(error)) {
         request.log.warn({ err: error }, 'VALIDATION_ERROR');
         return reply.status(400).send({
           error: 'VALIDATION_ERROR',
           message: 'Request inválido',
-          details: error.validation,
+          details: error.validation ?? (error as unknown as { issues?: unknown }).issues,
           requestId: request.id,
         });
       }

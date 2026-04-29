@@ -52,6 +52,22 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
+  // HubSpot's `hubspot.fetch` strips the Content-Type header (only Authorization
+  // is allowed). The body still arrives as a JSON string, so we register a
+  // catch-all parser that JSON-parses any body that isn't already handled.
+  fastify.addContentTypeParser(
+    '*',
+    { parseAs: 'string' },
+    (_req, body, done) => {
+      if (!body) return done(null, undefined);
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    }
+  );
+
   // 2) Global error handler (AppError → HTTP)
   registerErrorHandler(fastify);
 
