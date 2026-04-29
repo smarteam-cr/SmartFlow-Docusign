@@ -220,11 +220,12 @@ Setup paso a paso de cuentas externas en spec §14.
 
 ## Endpoints expuestos
 
-| Method | Path | Qué hace |
+| Method | Path                                        | Qué hace |
 |---|---|---|
-| `GET` | `/api/v1/docusign/templates` | Lista templates DocuSign disponibles |
-| `POST` | `/api/v1/docusign/envelopes` | Body `{ dealId, templateId }` → envía envelope al primer contacto del Deal |
-| `GET` | `/health` | `{ status, uptime, version }` (sin auth) |
+| `GET`  | `/api/v1/docusign/templates`              | Lista templates DocuSign disponibles |
+| `GET`  | `/api/v1/hubspot/deals/:dealId/contacts`  | Lista contactos asociados al Deal (solo los que tienen email) |
+| `POST` | `/api/v1/docusign/envelopes`              | Body `{ dealId, templateId, contactId }` → envía envelope al contacto elegido |
+| `GET`  | `/health`                                  | `{ status, uptime, version }` (sin auth) |
 
 Contratos completos en spec §5.1.
 

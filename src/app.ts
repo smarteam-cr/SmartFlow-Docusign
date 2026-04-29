@@ -21,7 +21,7 @@ import { createContactsController } from './controllers/contacts.controller.js';
 import { registerV1Routes } from './routes/index.js';
 import { registerErrorHandler } from './middlewares/errorHandler.js';
 
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '1.1.0';
 
 /**
  * Builds and returns a Fastify instance fully wired with adapters, services,
