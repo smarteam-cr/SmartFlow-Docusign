@@ -4,29 +4,32 @@ import type {
   DocusignAdapter,
   TemplateSummary,
 } from '../../integrations/Docusign/index.js';
-import type { HubSpotAdapter } from '../../integrations/HS/index.js';
-import type {
-  ContactInfo,
-  TemplateMappingResolver,
-} from '../../lib/template-mapping/index.js';
+import type { Contact, HubSpotAdapter } from '../../integrations/HS/index.js';
+import type { TemplateMappingResolver } from '../../lib/template-mapping/index.js';
 import {
   NotFoundError,
-  ValidationError,
   ExternalServiceError,
 } from '../../lib/errors/index.js';
 
-const sampleContact: ContactInfo = {
+const ada: Contact = {
+  id: 'c-ada',
   firstName: 'Ada',
   lastName: 'Lovelace',
   email: 'ada@math.org',
 };
 
-function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
+const grace: Contact = {
+  id: 'c-grace',
+  firstName: 'Grace',
+  lastName: 'Hopper',
+  email: 'grace@navy.mil',
+};
+
+function makeFakeHubspot(contacts: Contact[] = [ada, grace]): HubSpotAdapter {
   return {
-    getDealPrimaryContact: jest
-      .fn<HubSpotAdapter['getDealPrimaryContact']>()
-      .mockResolvedValue(sampleContact),
-    ...overrides,
+    getDealContacts: jest
+      .fn<HubSpotAdapter['getDealContacts']>()
+      .mockResolvedValue(contacts),
   };
 }
 
@@ -57,7 +60,7 @@ function makeFakeMapping(
 }
 
 describe('envelopes.service', () => {
-  test('happy path: composes hubspot + docusign + mapping correctly', async () => {
+  test('happy path: uses chosen contact, composes hubspot + docusign + mapping', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
@@ -67,6 +70,7 @@ describe('envelopes.service', () => {
     const result = await service.sendFromTemplate({
       dealId: '12345',
       templateId: 'tpl-abc',
+      contactId: 'c-ada',
     });
 
     expect(result).toEqual({
@@ -75,11 +79,11 @@ describe('envelopes.service', () => {
       recipientEmail: 'ada@math.org',
     });
 
-    expect(hubspot.getDealPrimaryContact).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealContacts).toHaveBeenCalledWith('12345');
     expect(docusign.getFirstRoleName).toHaveBeenCalledWith('tpl-abc');
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
-      contact: sampleContact,
+      contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@math.org' },
     });
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
@@ -92,12 +96,8 @@ describe('envelopes.service', () => {
     });
   });
 
-  test('propagates DEAL_NOT_FOUND from hubspot', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealPrimaryContact: jest
-        .fn<HubSpotAdapter['getDealPrimaryContact']>()
-        .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
-    });
+  test('throws NO_CONTACTS_FOR_DEAL when adapter returns empty list', async () => {
+    const hubspot = makeFakeHubspot([]);
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
@@ -105,18 +105,16 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({ dealId: '99', templateId: 'tpl' })
-    ).rejects.toMatchObject({ code: 'DEAL_NOT_FOUND', httpStatus: 404 });
+      service.sendFromTemplate({
+        dealId: '12345',
+        templateId: 'tpl-abc',
+        contactId: 'c-ada',
+      })
+    ).rejects.toMatchObject({ code: 'NO_CONTACTS_FOR_DEAL', httpStatus: 404 });
   });
 
-  test('propagates CONTACT_EMAIL_MISSING from hubspot', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealPrimaryContact: jest
-        .fn<HubSpotAdapter['getDealPrimaryContact']>()
-        .mockRejectedValue(
-          new ValidationError('CONTACT_EMAIL_MISSING', 'sin email', undefined)
-        ),
-    });
+  test('throws CONTACT_NOT_IN_DEAL when contactId is not in the list', async () => {
+    const hubspot = makeFakeHubspot([ada, grace]);
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
@@ -124,8 +122,29 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl' })
-    ).rejects.toMatchObject({ code: 'CONTACT_EMAIL_MISSING', httpStatus: 422 });
+      service.sendFromTemplate({
+        dealId: '12345',
+        templateId: 'tpl-abc',
+        contactId: 'c-stranger',
+      })
+    ).rejects.toMatchObject({ code: 'CONTACT_NOT_IN_DEAL', httpStatus: 422 });
+  });
+
+  test('propagates DEAL_NOT_FOUND from hubspot.getDealContacts', async () => {
+    const hubspot: HubSpotAdapter = {
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
+    };
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '99', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DEAL_NOT_FOUND', httpStatus: 404 });
   });
 
   test('propagates TEMPLATE_NOT_FOUND from docusign.getFirstRoleName', async () => {
@@ -141,7 +160,7 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl-bad' })
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl-bad', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'TEMPLATE_NOT_FOUND', httpStatus: 404 });
   });
 
@@ -160,7 +179,22 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl' })
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'DOCUSIGN_UNAVAILABLE', httpStatus: 502 });
+  });
+
+  test('throws CONTACT_EMAIL_MISSING (defensive) if chosen contact has empty email', async () => {
+    const noEmail: Contact = { id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '' };
+    // Bypass the adapter's filter by injecting the contact directly via the fake.
+    const hubspot = makeFakeHubspot([noEmail]);
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ghost' })
+    ).rejects.toMatchObject({ code: 'CONTACT_EMAIL_MISSING', httpStatus: 422 });
   });
 });

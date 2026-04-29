@@ -13,6 +13,11 @@ export const sendEnvelopeBodySchema = z.object({
     .max(64)
     .regex(/^[0-9]+$/, 'dealId debe ser numérico'),
   templateId: z.string().min(1).max(64),
+  contactId: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[0-9]+$/, 'contactId debe ser numérico'),
 });
 
 export type SendEnvelopeBody = z.infer<typeof sendEnvelopeBodySchema>;

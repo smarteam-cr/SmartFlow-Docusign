@@ -10,9 +10,14 @@ import { createEnvTenantConfigProvider } from './lib/tenant-config/index.js';
 import { createStaticTemplateMappingResolver } from './lib/template-mapping/index.js';
 import { createHubSpotAdapter } from './integrations/HS/index.js';
 import { createDocusignAdapter } from './integrations/Docusign/index.js';
-import { createTemplatesService, createEnvelopesService } from './services/index.js';
+import {
+  createTemplatesService,
+  createEnvelopesService,
+  createContactsService,
+} from './services/index.js';
 import { createTemplatesController } from './controllers/templates.controller.js';
 import { createEnvelopesController } from './controllers/envelopes.controller.js';
+import { createContactsController } from './controllers/contacts.controller.js';
 import { registerV1Routes } from './routes/index.js';
 import { registerErrorHandler } from './middlewares/errorHandler.js';
 
@@ -87,6 +92,8 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
 
   const templatesController = createTemplatesController(templatesService);
   const envelopesController = createEnvelopesController(envelopesService);
+  const contactsService = createContactsService({ hubspot });
+  const contactsController = createContactsController(contactsService);
 
   // 4) Register v1 routes under /api/v1
   await fastify.register(
@@ -94,6 +101,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
       await instance.register(registerV1Routes, {
         templatesController,
         envelopesController,
+        contactsController,
       });
     },
     { prefix: '/api/v1' }
