@@ -30,6 +30,18 @@ function makeFakeHubspot(contacts: Contact[] = [ada, grace]): HubSpotAdapter {
     getDealContacts: jest
       .fn<HubSpotAdapter['getDealContacts']>()
       .mockResolvedValue(contacts),
+    getContactDetails: jest
+      .fn<HubSpotAdapter['getContactDetails']>()
+      .mockResolvedValue({ id: 'stub', identification: 'stub', country: 'stub' }),
+    getDeal: jest
+      .fn<HubSpotAdapter['getDeal']>()
+      .mockResolvedValue({ id: 'stub', currencyCode: 'USD' }),
+    getDealPrimaryCompany: jest
+      .fn<HubSpotAdapter['getDealPrimaryCompany']>()
+      .mockResolvedValue({ id: 'stub', name: 'stub', country: 'stub', address: 'stub' }),
+    getDealLineItem: jest
+      .fn<HubSpotAdapter['getDealLineItem']>()
+      .mockResolvedValue({ id: 'stub', name: 'stub', sku: 'stub', price: 'stub' }),
   };
 }
 
@@ -135,6 +147,18 @@ describe('envelopes.service', () => {
       getDealContacts: jest
         .fn<HubSpotAdapter['getDealContacts']>()
         .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
+      getContactDetails: jest
+        .fn<HubSpotAdapter['getContactDetails']>()
+        .mockResolvedValue({ id: 'stub', identification: 'stub', country: 'stub' }),
+      getDeal: jest
+        .fn<HubSpotAdapter['getDeal']>()
+        .mockResolvedValue({ id: 'stub', currencyCode: 'USD' }),
+      getDealPrimaryCompany: jest
+        .fn<HubSpotAdapter['getDealPrimaryCompany']>()
+        .mockResolvedValue({ id: 'stub', name: 'stub', country: 'stub', address: 'stub' }),
+      getDealLineItem: jest
+        .fn<HubSpotAdapter['getDealLineItem']>()
+        .mockResolvedValue({ id: 'stub', name: 'stub', sku: 'stub', price: 'stub' }),
     };
     const service = createEnvelopesService({
       hubspot,
