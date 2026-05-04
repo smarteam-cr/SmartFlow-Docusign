@@ -357,9 +357,10 @@ describe('envelopes.service', () => {
           SkuProducto: '   ', // whitespace-only also counts as empty
         }),
     });
+    const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
       hubspot: makeFakeHubspot(),
-      docusign: makeFakeDocusign(),
+      docusign,
       templateMapping,
     });
 
@@ -370,6 +371,8 @@ describe('envelopes.service', () => {
       httpStatus: 422,
       details: { missingFields: ['DireccionEmpresaComodatario', 'SkuProducto'] },
     });
+
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
   });
 
   test('happy path actually consults all 5 parallel fetches before sending', async () => {
