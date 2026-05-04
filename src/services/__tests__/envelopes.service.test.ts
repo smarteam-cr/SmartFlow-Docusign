@@ -4,10 +4,18 @@ import type {
   DocusignAdapter,
   TemplateSummary,
 } from '../../integrations/Docusign/index.js';
-import type { Contact, HubSpotAdapter } from '../../integrations/HS/index.js';
+import type {
+  Contact,
+  ContactDetails,
+  Company,
+  DealSummary,
+  HubSpotAdapter,
+  LineItem,
+} from '../../integrations/HS/index.js';
 import type { TemplateMappingResolver } from '../../lib/template-mapping/index.js';
 import {
   NotFoundError,
+  ValidationError,
   ExternalServiceError,
 } from '../../lib/errors/index.js';
 
@@ -25,23 +33,49 @@ const grace: Contact = {
   email: 'grace@navy.mil',
 };
 
-function makeFakeHubspot(contacts: Contact[] = [ada, grace]): HubSpotAdapter {
+const adaDetails: ContactDetails = {
+  id: 'c-ada',
+  identification: 'CC-12345',
+  country: 'Colombia',
+};
+
+const fullDeal: DealSummary = {
+  id: '12345',
+  currencyCode: 'USD',
+};
+
+const fullCompany: Company = {
+  id: 'co-1',
+  name: 'ACME Inc',
+  country: 'Colombia',
+  address: 'Calle 100 #5-30',
+};
+
+const fullLineItem: LineItem = {
+  id: 'li-1',
+  name: 'Producto X',
+  sku: 'SKU-001',
+  price: '1000',
+};
+
+function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
   return {
     getDealContacts: jest
       .fn<HubSpotAdapter['getDealContacts']>()
-      .mockResolvedValue(contacts),
+      .mockResolvedValue([ada, grace]),
     getContactDetails: jest
       .fn<HubSpotAdapter['getContactDetails']>()
-      .mockResolvedValue({ id: 'stub', identification: 'stub', country: 'stub' }),
+      .mockResolvedValue(adaDetails),
     getDeal: jest
       .fn<HubSpotAdapter['getDeal']>()
-      .mockResolvedValue({ id: 'stub', currencyCode: 'USD' }),
+      .mockResolvedValue(fullDeal),
     getDealPrimaryCompany: jest
       .fn<HubSpotAdapter['getDealPrimaryCompany']>()
-      .mockResolvedValue({ id: 'stub', name: 'stub', country: 'stub', address: 'stub' }),
+      .mockResolvedValue(fullCompany),
     getDealLineItem: jest
       .fn<HubSpotAdapter['getDealLineItem']>()
-      .mockResolvedValue({ id: 'stub', name: 'stub', sku: 'stub', price: 'stub' }),
+      .mockResolvedValue(fullLineItem),
+    ...overrides,
   };
 }
 
@@ -60,19 +94,33 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
   };
 }
 
+const fullTabs: Record<string, string> = {
+  Nombre: 'Ada',
+  Apellido: 'Lovelace',
+  NumeroIdentificacionComodatario: 'CC-12345',
+  PaisContactoComodatario: 'Colombia',
+  EmpresaComodatario: 'ACME Inc',
+  PaisEmpresaComodatario: 'Colombia',
+  DireccionEmpresaComodatario: 'Calle 100 #5-30',
+  NombreProducto: 'Producto X',
+  SkuProducto: 'SKU-001',
+  PrecioProducto: '1000',
+  Moneda: 'USD',
+};
+
 function makeFakeMapping(
   overrides: Partial<TemplateMappingResolver> = {}
 ): TemplateMappingResolver {
   return {
     resolveTabValues: jest
       .fn<TemplateMappingResolver['resolveTabValues']>()
-      .mockReturnValue({ Nombre: 'Ada', Apellido: 'Lovelace' }),
+      .mockReturnValue(fullTabs),
     ...overrides,
   };
 }
 
 describe('envelopes.service', () => {
-  test('happy path: uses chosen contact, composes hubspot + docusign + mapping', async () => {
+  test('happy path: composes hubspot + docusign + mapping with 11 tabs', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
@@ -92,11 +140,21 @@ describe('envelopes.service', () => {
     });
 
     expect(hubspot.getDealContacts).toHaveBeenCalledWith('12345');
+    expect(hubspot.getContactDetails).toHaveBeenCalledWith('c-ada');
+    expect(hubspot.getDeal).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealLineItem).toHaveBeenCalledWith('12345');
     expect(docusign.getFirstRoleName).toHaveBeenCalledWith('tpl-abc');
+
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
       contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@math.org' },
+      contactDetails: { identification: 'CC-12345', country: 'Colombia' },
+      company: { name: 'ACME Inc', country: 'Colombia', address: 'Calle 100 #5-30' },
+      lineItem: { name: 'Producto X', sku: 'SKU-001', price: '1000' },
+      dealCurrencyCode: 'USD',
     });
+
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
       signer: {
@@ -104,12 +162,16 @@ describe('envelopes.service', () => {
         email: 'ada@math.org',
         roleName: 'Signer 1',
       },
-      prefillTabs: { Nombre: 'Ada', Apellido: 'Lovelace' },
+      prefillTabs: fullTabs,
     });
   });
 
-  test('throws NO_CONTACTS_FOR_DEAL when adapter returns empty list', async () => {
-    const hubspot = makeFakeHubspot([]);
+  test('throws NO_CONTACTS_FOR_DEAL when contact list is empty', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockResolvedValue([]),
+    });
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
@@ -126,9 +188,8 @@ describe('envelopes.service', () => {
   });
 
   test('throws CONTACT_NOT_IN_DEAL when contactId is not in the list', async () => {
-    const hubspot = makeFakeHubspot([ada, grace]);
     const service = createEnvelopesService({
-      hubspot,
+      hubspot: makeFakeHubspot(),
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
     });
@@ -143,23 +204,11 @@ describe('envelopes.service', () => {
   });
 
   test('propagates DEAL_NOT_FOUND from hubspot.getDealContacts', async () => {
-    const hubspot: HubSpotAdapter = {
+    const hubspot = makeFakeHubspot({
       getDealContacts: jest
         .fn<HubSpotAdapter['getDealContacts']>()
         .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
-      getContactDetails: jest
-        .fn<HubSpotAdapter['getContactDetails']>()
-        .mockResolvedValue({ id: 'stub', identification: 'stub', country: 'stub' }),
-      getDeal: jest
-        .fn<HubSpotAdapter['getDeal']>()
-        .mockResolvedValue({ id: 'stub', currencyCode: 'USD' }),
-      getDealPrimaryCompany: jest
-        .fn<HubSpotAdapter['getDealPrimaryCompany']>()
-        .mockResolvedValue({ id: 'stub', name: 'stub', country: 'stub', address: 'stub' }),
-      getDealLineItem: jest
-        .fn<HubSpotAdapter['getDealLineItem']>()
-        .mockResolvedValue({ id: 'stub', name: 'stub', sku: 'stub', price: 'stub' }),
-    };
+    });
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
@@ -209,8 +258,11 @@ describe('envelopes.service', () => {
 
   test('throws CONTACT_EMAIL_MISSING (defensive) if chosen contact has empty email', async () => {
     const noEmail: Contact = { id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '' };
-    // Bypass the adapter's filter by injecting the contact directly via the fake.
-    const hubspot = makeFakeHubspot([noEmail]);
+    const hubspot = makeFakeHubspot({
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockResolvedValue([noEmail]),
+    });
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
@@ -220,5 +272,126 @@ describe('envelopes.service', () => {
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ghost' })
     ).rejects.toMatchObject({ code: 'CONTACT_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  // ─── New tests for Plan 6 ─────────────────────────────────────────────
+
+  test('propagates DEAL_LINE_ITEMS_INVALID when adapter throws (0 line items)', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealLineItem: jest
+        .fn<HubSpotAdapter['getDealLineItem']>()
+        .mockRejectedValue(
+          new ValidationError('DEAL_LINE_ITEMS_INVALID', '0 encontrados', undefined)
+        ),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DEAL_LINE_ITEMS_INVALID', httpStatus: 422 });
+
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('propagates DEAL_HAS_NO_COMPANY when Deal has no primary company', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealPrimaryCompany: jest
+        .fn<HubSpotAdapter['getDealPrimaryCompany']>()
+        .mockRejectedValue(
+          new ValidationError('DEAL_HAS_NO_COMPANY', 'sin primary', undefined)
+        ),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DEAL_HAS_NO_COMPANY', httpStatus: 422 });
+
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('throws MISSING_REQUIRED_FIELD when one tab value is empty (identification)', async () => {
+    const templateMapping = makeFakeMapping({
+      resolveTabValues: jest
+        .fn<TemplateMappingResolver['resolveTabValues']>()
+        .mockReturnValue({
+          ...fullTabs,
+          NumeroIdentificacionComodatario: '',
+        }),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping,
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({
+      code: 'MISSING_REQUIRED_FIELD',
+      httpStatus: 422,
+      details: { missingFields: ['NumeroIdentificacionComodatario'] },
+    });
+
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('MISSING_REQUIRED_FIELD lists all empty tabs in iteration order', async () => {
+    const templateMapping = makeFakeMapping({
+      resolveTabValues: jest
+        .fn<TemplateMappingResolver['resolveTabValues']>()
+        .mockReturnValue({
+          ...fullTabs,
+          DireccionEmpresaComodatario: '',
+          SkuProducto: '   ', // whitespace-only also counts as empty
+        }),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping,
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({
+      code: 'MISSING_REQUIRED_FIELD',
+      httpStatus: 422,
+      details: { missingFields: ['DireccionEmpresaComodatario', 'SkuProducto'] },
+    });
+  });
+
+  test('happy path actually consults all 5 parallel fetches before sending', async () => {
+    const hubspot = makeFakeHubspot();
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    expect(hubspot.getContactDetails).toHaveBeenCalledTimes(1);
+    expect(hubspot.getDeal).toHaveBeenCalledTimes(1);
+    expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledTimes(1);
+    expect(hubspot.getDealLineItem).toHaveBeenCalledTimes(1);
+    expect(docusign.getFirstRoleName).toHaveBeenCalledTimes(1);
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
   });
 });

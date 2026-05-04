@@ -31,8 +31,7 @@ export interface EnvelopesServiceDeps {
 export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesService {
   return {
     async sendFromTemplate(input: SendFromTemplateInput): Promise<SendFromTemplateResult> {
-      // 1) Re-fetch the contact list for this Deal (closes the trust-boundary:
-      //    the frontend cannot send to a contact that doesn't belong to the Deal).
+      // 1) Re-fetch contact list for this Deal (closes the trust-boundary).
       const contacts = await deps.hubspot.getDealContacts(input.dealId);
       if (contacts.length === 0) {
         throw new NotFoundError(
@@ -52,8 +51,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 3) Defensive guard: the adapter already filters out contacts without
-      //    email, but we re-check here in case a future adapter changes that.
+      // 3) Defensive: the adapter filters out empty emails, but re-check.
       if (!chosen.email) {
         throw new ValidationError(
           'CONTACT_EMAIL_MISSING',
@@ -62,17 +60,54 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 4) Compose the envelope using the chosen contact.
-      const roleName = await deps.docusign.getFirstRoleName(input.templateId);
-      const prefillTabs = await deps.templateMapping.resolveTabValues({
+      // 4) Fetch all the extended data + DocuSign role in parallel.
+      const [contactDetails, deal, company, lineItem, roleName] = await Promise.all([
+        deps.hubspot.getContactDetails(input.contactId),
+        deps.hubspot.getDeal(input.dealId),
+        deps.hubspot.getDealPrimaryCompany(input.dealId),
+        deps.hubspot.getDealLineItem(input.dealId),
+        deps.docusign.getFirstRoleName(input.templateId),
+      ]);
+
+      // 5) Build the mapping context and resolve the 11 tabs.
+      const tabs = await deps.templateMapping.resolveTabValues({
         templateId: input.templateId,
         contact: {
           firstName: chosen.firstName,
           lastName: chosen.lastName,
           email: chosen.email,
         },
+        contactDetails: {
+          identification: contactDetails.identification,
+          country: contactDetails.country,
+        },
+        company: {
+          name: company.name,
+          country: company.country,
+          address: company.address,
+        },
+        lineItem: {
+          name: lineItem.name,
+          sku: lineItem.sku,
+          price: lineItem.price,
+        },
+        dealCurrencyCode: deal.currencyCode,
       });
 
+      // 6) Validate: no empty values across the resolved tabs.
+      const missingFields = Object.entries(tabs)
+        .filter(([, v]) => !v || v.trim() === '')
+        .map(([k]) => k);
+
+      if (missingFields.length > 0) {
+        throw new ValidationError(
+          'MISSING_REQUIRED_FIELD',
+          `Faltan datos requeridos para los campos: ${missingFields.join(', ')}`,
+          { missingFields }
+        );
+      }
+
+      // 7) Send envelope.
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
         signer: {
@@ -80,7 +115,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
           email: chosen.email,
           roleName,
         },
-        prefillTabs,
+        prefillTabs: tabs,
       });
 
       return {
