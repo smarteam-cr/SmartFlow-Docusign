@@ -292,6 +292,13 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         `?properties=name,country,address`;
       const companyRes = await hubspotFetch(companyUrl);
 
+      if (companyRes.status === 404) {
+        throw new ValidationError(
+          'DEAL_HAS_NO_COMPANY',
+          `La empresa ${companyId} asociada al Deal ${dealId} fue eliminada o archivada`,
+          { dealId, companyId }
+        );
+      }
       if (!companyRes.ok) {
         throw new ExternalServiceError(
           'HUBSPOT_UNAVAILABLE',
@@ -353,6 +360,13 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         `?properties=name,hs_sku,price`;
       const liRes = await hubspotFetch(liUrl);
 
+      if (liRes.status === 404) {
+        throw new ValidationError(
+          'DEAL_LINE_ITEMS_INVALID',
+          `El line item ${lineItemId} del Deal ${dealId} fue eliminado o archivado`,
+          { dealId, lineItemId }
+        );
+      }
       if (!liRes.ok) {
         throw new ExternalServiceError(
           'HUBSPOT_UNAVAILABLE',
