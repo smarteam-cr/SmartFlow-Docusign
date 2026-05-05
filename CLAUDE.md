@@ -98,11 +98,11 @@ Si un cambio te hace dudar de esta regla, **abre el spec en §4.2 y verifica ant
 // integrations/HS/index.ts
 export function createHubSpotAdapter(config: { accessToken: string }) {
   return {
-    async getDealContacts(dealId: string): Promise<Contact[]> {
-      // mugre HTTP encapsulada aquí dentro:
-      // 1) v4 associations → contact IDs
-      // 2) v3 batch/read → propiedades de todos. Filtra los sin email.
-    }
+    async getDealContacts(dealId: string): Promise<Contact[]> { /* v4 assoc + v3 batch-read */ },
+    async getContactDetails(contactId: string): Promise<ContactDetails> { /* v3 single read, PII fields */ },
+    async getDeal(dealId: string): Promise<DealSummary> { /* currencyCode */ },
+    async getDealPrimaryCompany(dealId: string): Promise<Company> { /* v4 assoc filtered by Primary label */ },
+    async getDealLineItem(dealId: string): Promise<LineItem> { /* throws if 0 or >1, or if archived */ },
   };
 }
 ```
