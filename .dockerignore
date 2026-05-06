@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.example
+**/*.test.ts
+**/__tests__/**
+.git
+.gitignore
+.dockerignore
+CLAUDE.md
+package-lock.json

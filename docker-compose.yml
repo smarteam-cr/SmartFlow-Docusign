@@ -1,0 +1,11 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm run start
+    ports:
+      - "${PORT:-3002}:3002"
+    env_file:
+      - .env
+    restart: unless-stopped
