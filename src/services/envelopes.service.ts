@@ -94,20 +94,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         dealCurrencyCode: deal.currencyCode,
       });
 
-      // 6) Validate: no empty values across the resolved tabs.
-      const missingFields = Object.entries(tabs)
-        .filter(([, v]) => !v || v.trim() === '')
-        .map(([k]) => k);
-
-      if (missingFields.length > 0) {
-        throw new ValidationError(
-          'MISSING_REQUIRED_FIELD',
-          `Faltan datos requeridos para los campos: ${missingFields.join(', ')}`,
-          { missingFields }
-        );
-      }
-
-      // 7) Send envelope.
+      // 6) Send envelope.
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
         signer: {

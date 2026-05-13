@@ -320,41 +320,15 @@ describe('envelopes.service', () => {
     expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
   });
 
-  test('throws MISSING_REQUIRED_FIELD when one tab value is empty (identification)', async () => {
+  test('no lanza cuando el resolver devuelve campos vacíos (tolerancia field-level v2)', async () => {
     const templateMapping = makeFakeMapping({
       resolveTabValues: jest
         .fn<TemplateMappingResolver['resolveTabValues']>()
         .mockReturnValue({
           ...fullTabs,
           NumeroIdentificacionComodatario: '',
-        }),
-    });
-    const docusign = makeFakeDocusign();
-    const service = createEnvelopesService({
-      hubspot: makeFakeHubspot(),
-      docusign,
-      templateMapping,
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({
-      code: 'MISSING_REQUIRED_FIELD',
-      httpStatus: 422,
-      details: { missingFields: ['NumeroIdentificacionComodatario'] },
-    });
-
-    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
-  });
-
-  test('MISSING_REQUIRED_FIELD lists all empty tabs in iteration order', async () => {
-    const templateMapping = makeFakeMapping({
-      resolveTabValues: jest
-        .fn<TemplateMappingResolver['resolveTabValues']>()
-        .mockReturnValue({
-          ...fullTabs,
           DireccionEmpresaComodatario: '',
-          SkuProducto: '   ', // whitespace-only also counts as empty
+          SkuProducto: '   ',
         }),
     });
     const docusign = makeFakeDocusign();
@@ -364,15 +338,26 @@ describe('envelopes.service', () => {
       templateMapping,
     });
 
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({
-      code: 'MISSING_REQUIRED_FIELD',
-      httpStatus: 422,
-      details: { missingFields: ['DireccionEmpresaComodatario', 'SkuProducto'] },
+    const result = await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl',
+      contactId: 'c-ada',
     });
 
-    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+    // Envío exitoso, no se lanza ningún error de field-level
+    expect(result.envelopeId).toBeDefined();
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+
+    // Los tabs vacíos llegan al adapter tal cual (no se filtran)
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prefillTabs: expect.objectContaining({
+          NumeroIdentificacionComodatario: '',
+          DireccionEmpresaComodatario: '',
+          SkuProducto: '   ',
+        }),
+      })
+    );
   });
 
   test('happy path actually consults all 5 parallel fetches before sending', async () => {
