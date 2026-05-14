@@ -114,6 +114,16 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getContactById(contactId: string): Promise<Contact>;
+
+  /**
+   * Returns the IDs of contacts associated to a Deal whose association has
+   * the USER_DEFINED label `responsable_jurídico`. Returns empty array if
+   * none match. Duplicates within the same contact are de-duped.
+   *
+   * @throws NotFoundError(DEAL_NOT_FOUND) on 404
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  findJuridicoContactIds(dealId: string): Promise<string[]>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -525,6 +535,44 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         email: body.properties?.email?.trim() ?? '',
         docIdentificacion: body.properties?.doc_identificacion?.trim() ?? '',
       };
+    },
+
+    async findJuridicoContactIds(dealId: string): Promise<string[]> {
+      const url = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts`;
+      const res = await hubspotFetch(url);
+
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'DEAL_NOT_FOUND',
+          `Deal ${dealId} no existe en HubSpot`,
+          { dealId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al buscar contactos jurídicos`,
+          { dealId, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        results?: Array<{
+          toObjectId?: string | number;
+          associationTypes?: Array<{ label?: string }>;
+        }>;
+      };
+
+      const ids = new Set<string>();
+      for (const r of body.results ?? []) {
+        const hasJuridico = (r.associationTypes ?? []).some(
+          (t) => t.label === 'responsable_jurídico'
+        );
+        if (hasJuridico && r.toObjectId !== undefined && r.toObjectId !== null) {
+          ids.add(String(r.toObjectId));
+        }
+      }
+      return [...ids];
     },
   };
 }

@@ -170,6 +170,63 @@ describe('HubSpotAdapter.getContactById', () => {
   });
 });
 
+describe('HubSpotAdapter.findJuridicoContactIds', () => {
+  test('retorna IDs de contactos con label responsable_jurídico', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: {
+        results: [
+          {
+            toObjectId: 'c-1',
+            associationTypes: [{ category: 'HUBSPOT_DEFINED', label: 'Contact' }],
+          },
+          {
+            toObjectId: 'c-2',
+            associationTypes: [
+              { category: 'HUBSPOT_DEFINED', label: 'Contact' },
+              { category: 'USER_DEFINED', label: 'responsable_jurídico' },
+            ],
+          },
+        ],
+      },
+    }]);
+
+    const ids = await adapter.findJuridicoContactIds('d-1');
+    expect(ids).toEqual(['c-2']);
+  });
+
+  test('retorna array vacío si ningún contacto tiene el label', async () => {
+    mockFetchSequence([{ status: 200, body: { results: [] } }]);
+    const ids = await adapter.findJuridicoContactIds('d-1');
+    expect(ids).toEqual([]);
+  });
+
+  test('deduplica IDs cuando un contacto tiene múltiples association types con el mismo label', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: {
+        results: [{
+          toObjectId: 'c-1',
+          associationTypes: [
+            { category: 'USER_DEFINED', label: 'responsable_jurídico' },
+            { category: 'USER_DEFINED', label: 'responsable_jurídico' },
+          ],
+        }],
+      },
+    }]);
+    const ids = await adapter.findJuridicoContactIds('d-1');
+    expect(ids).toEqual(['c-1']);
+  });
+
+  test('lanza DEAL_NOT_FOUND con 404', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+    await expect(adapter.findJuridicoContactIds('d-ghost')).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([
