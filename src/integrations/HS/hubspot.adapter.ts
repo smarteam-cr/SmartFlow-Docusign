@@ -104,6 +104,16 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getDealOwner(dealId: string): Promise<DealOwner>;
+
+  /**
+   * Reads a single contact by id (used to resolve the Proveedor contact
+   * configured in TEMPLATE_PROVEEDOR_MAP). Returns the Contact shape — the
+   * email may be empty; the email-required validation is the caller's job.
+   *
+   * @throws ValidationError(PROVEEDOR_CONTACT_NOT_FOUND) on 404
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getContactById(contactId: string): Promise<Contact>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -463,6 +473,40 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const name = `${ownerBody.firstName ?? ''} ${ownerBody.lastName ?? ''}`.trim();
       return { id: String(ownerId), name, email };
+    },
+
+    async getContactById(contactId: string): Promise<Contact> {
+      const url =
+        `${HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}` +
+        `?properties=firstname,lastname,email`;
+      const res = await hubspotFetch(url);
+
+      if (res.status === 404) {
+        throw new ValidationError(
+          'PROVEEDOR_CONTACT_NOT_FOUND',
+          `El contacto proveedor ${contactId} no existe en HubSpot (revisa TEMPLATE_PROVEEDOR_MAP)`,
+          { contactId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al leer el contacto proveedor ${contactId}`,
+          { contactId, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        id?: string;
+        properties?: { firstname?: string; lastname?: string; email?: string };
+      };
+
+      return {
+        id: body.id ?? contactId,
+        firstName: body.properties?.firstname?.trim() ?? '',
+        lastName: body.properties?.lastname?.trim() ?? '',
+        email: body.properties?.email?.trim() ?? '',
+      };
     },
   };
 }

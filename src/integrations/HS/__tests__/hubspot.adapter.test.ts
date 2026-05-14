@@ -20,6 +20,37 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('HubSpotAdapter.getContactById', () => {
+  test('happy path: retorna contacto con nombre y email', async () => {
+    mockFetchSequence([
+      {
+        status: 200,
+        body: {
+          id: 'c-proveedor',
+          properties: { firstname: 'María', lastname: 'Gómez', email: 'maria@proveedor.co' },
+        },
+      },
+    ]);
+
+    const contact = await adapter.getContactById('c-proveedor');
+    expect(contact).toEqual({
+      id: 'c-proveedor',
+      firstName: 'María',
+      lastName: 'Gómez',
+      email: 'maria@proveedor.co',
+    });
+  });
+
+  test('lanza PROVEEDOR_CONTACT_NOT_FOUND cuando el contacto no existe (404)', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+
+    await expect(adapter.getContactById('c-ghost')).rejects.toMatchObject({
+      code: 'PROVEEDOR_CONTACT_NOT_FOUND',
+      httpStatus: 422,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([

@@ -65,6 +65,13 @@ const dealOwner: DealOwner = {
   email: 'carlos@empresa.co',
 };
 
+const proveedorContact: Contact = {
+  id: 'c-proveedor',
+  firstName: 'María',
+  lastName: 'Gómez',
+  email: 'maria@proveedor.co',
+};
+
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
   return {
     getDealContacts: jest
@@ -85,6 +92,9 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     getDealOwner: jest
       .fn<HubSpotAdapter['getDealOwner']>()
       .mockResolvedValue(dealOwner),
+    getContactById: jest
+      .fn<HubSpotAdapter['getContactById']>()
+      .mockResolvedValue(proveedorContact),
     ...overrides,
   };
 }
