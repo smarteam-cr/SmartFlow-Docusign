@@ -13,6 +13,8 @@ const envSchema = z.object({
   DOCUSIGN_PRIVATE_KEY: z.string().min(1, 'DOCUSIGN_PRIVATE_KEY is required'),
   DOCUSIGN_ACCOUNT_ID: z.string().min(1, 'DOCUSIGN_ACCOUNT_ID is required'),
   DOCUSIGN_BASE_PATH: z.string().min(1, 'DOCUSIGN_BASE_PATH is required'),
+
+  TEMPLATE_PROVEEDOR_MAP: z.string().min(1, 'TEMPLATE_PROVEEDOR_MAP is required'),
 });
 
 export type Env = z.infer<typeof envSchema>;

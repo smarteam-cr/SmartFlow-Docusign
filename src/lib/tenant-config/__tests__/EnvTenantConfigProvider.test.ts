@@ -11,6 +11,7 @@ const sampleEnv: Env = {
   DOCUSIGN_PRIVATE_KEY: '-----BEGIN RSA-----\nkey\n-----END RSA-----',
   DOCUSIGN_ACCOUNT_ID: 'account-id',
   DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
+  TEMPLATE_PROVEEDOR_MAP: '{}',
 };
 
 describe('createEnvTenantConfigProvider', () => {

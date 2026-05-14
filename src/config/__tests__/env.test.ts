@@ -11,6 +11,7 @@ describe('parseEnv', () => {
     DOCUSIGN_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----',
     DOCUSIGN_ACCOUNT_ID: 'account-1',
     DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
+    TEMPLATE_PROVEEDOR_MAP: '{"82c6188c-f743-4bba-a762-49ae72d9aafe":"contact-id-123"}',
   };
 
   test('parses a valid env object', () => {
@@ -46,5 +47,10 @@ describe('parseEnv', () => {
     expect(() =>
       parseEnv({ ...validEnv, NODE_ENV: 'staging' })
     ).toThrow();
+  });
+
+  test('throws when TEMPLATE_PROVEEDOR_MAP is missing', () => {
+    const { TEMPLATE_PROVEEDOR_MAP: _omit, ...rest } = validEnv;
+    expect(() => parseEnv(rest)).toThrow();
   });
 });
