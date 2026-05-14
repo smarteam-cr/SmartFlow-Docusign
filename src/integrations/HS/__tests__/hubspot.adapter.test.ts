@@ -84,4 +84,16 @@ describe('HubSpotAdapter.getDealOwner', () => {
       httpStatus: 422,
     });
   });
+
+  test('lanza OWNER_NOT_FOUND cuando el owner_id existe en el deal pero fue eliminado (owner 404)', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { hubspot_owner_id: '55555' } } },
+      { status: 404, body: {} },
+    ]);
+
+    await expect(adapter.getDealOwner('d-1')).rejects.toMatchObject({
+      code: 'OWNER_NOT_FOUND',
+      httpStatus: 422,
+    });
+  });
 });

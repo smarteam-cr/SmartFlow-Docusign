@@ -20,4 +20,10 @@ describe('StaticTemplateRolesResolver', () => {
   test('lanza al construir si el JSON es inválido', () => {
     expect(() => createStaticTemplateRolesResolver('not-json')).toThrow();
   });
+
+  test('lanza al construir si el JSON no es objeto string→string', () => {
+    expect(() => createStaticTemplateRolesResolver(JSON.stringify({ tpl: 12345 }))).toThrow();
+    expect(() => createStaticTemplateRolesResolver(JSON.stringify({ tpl: ['a'] }))).toThrow();
+    expect(() => createStaticTemplateRolesResolver(JSON.stringify('no-es-objeto'))).toThrow();
+  });
 });

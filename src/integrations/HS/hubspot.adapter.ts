@@ -447,6 +447,13 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       const ownerUrl = `${HUBSPOT_BASE_URL}/crm/v3/owners/${encodeURIComponent(ownerId)}`;
       const ownerRes = await hubspotFetch(ownerUrl);
 
+      if (ownerRes.status === 404) {
+        throw new ValidationError(
+          'OWNER_NOT_FOUND',
+          `El propietario ${ownerId} asignado al Deal ${dealId} fue eliminado o desactivado en HubSpot`,
+          { dealId, ownerId }
+        );
+      }
       if (!ownerRes.ok) {
         throw new ExternalServiceError(
           'HUBSPOT_UNAVAILABLE',
