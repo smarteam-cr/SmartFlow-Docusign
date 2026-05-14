@@ -134,10 +134,12 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
           ...(r.tabs
             ? {
                 tabs: {
-                  textTabs: Object.entries(r.tabs).map(([tabLabel, value]) => ({
-                    tabLabel,
-                    value,
-                  })),
+                  textTabs: Object.entries(r.tabs).map(([tabLabel, value]) => {
+                    const base = { tabLabel, value };
+                    return tabLabel.startsWith('#HREF_')
+                      ? { ...base, name: value }
+                      : base;
+                  }),
                 },
               }
             : {}),
