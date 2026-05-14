@@ -1,58 +1,53 @@
 /**
- * Subset of HubSpot contact fields that the envelope flow needs.
- * Defined here (not in HubSpot adapter) because the resolver is the consumer
- * and shouldn't depend on integration-layer types.
+ * Resolution context handed to the resolver to compute prefill values for the
+ * Propietario role tabs. All IO happens upstream in the service — the resolver
+ * is sync and pure.
  */
-export interface ContactInfo {
+export interface ResolutionCompany {
+  razonSocial: string;
+  pais: string;
+}
+
+export interface ResolutionContactoLegal {
   firstName: string;
   lastName: string;
-  email: string;
+  docIdentificacion: string;
 }
 
-/** Extended contact properties (PII — kept off the listing endpoint). */
-export interface ContactDetailsInfo {
-  identification: string;
-  country: string;
+export interface ResolutionCapex {
+  qrCapex: string;
+  nombre: string;
+  cantidad: string;
+  costoNeto: string;
 }
 
-/** Company fields that the envelope flow needs. */
-export interface CompanyInfo {
-  name: string;
-  country: string;
-  address: string;
+export interface ResolutionDireccion {
+  direction: string;
 }
 
-/** Line item fields that the envelope flow needs. */
-export interface LineItemInfo {
-  name: string;
-  sku: string;
-  price: string;
+export interface ResolutionQuote {
+  hsQuoteLink: string;
 }
 
-/**
- * Context handed to the resolver to compute prefill values.
- * Today: contact, company, lineItem and currency. Future: tenantId, locale, etc.
- */
-export interface MappingContext {
+export interface ResolutionContext {
   templateId: string;
-  contact: ContactInfo;
-  contactDetails: ContactDetailsInfo;
-  company: CompanyInfo;
-  lineItem: LineItemInfo;
-  dealCurrencyCode: string;
+  company: ResolutionCompany;
+  contactoLegal: ResolutionContactoLegal;
+  capex: ResolutionCapex[];
+  direccion: ResolutionDireccion | null;
+  quote: ResolutionQuote;
 }
 
 /**
- * Port: returns a dictionary { tabLabel: value } that the DocuSign adapter
- * will inject into the envelope's textTabs.
+ * Port: returns the dictionary { tabLabel: value } that the DocuSign adapter
+ * will inject as textTabs on the Propietario role.
  *
- * Demo implementation hardcodes the 11 tabLabels. Production will read
- * mappings from Mongo per tenant (Roadmap §15.2).
+ * Synchronous: all IO happens in the envelope service. The resolver is pure.
  *
- * Note: synchronous in demo because the static resolver doesn't do I/O.
- * The Mongo implementation will be async — the service contract should
- * `await` to be forward-compatible.
+ * Tolerancia field-level (spec v2 §11): any missing/empty source produces
+ * an empty string. Never throws on missing data — structural validations
+ * are the service's job.
  */
 export interface TemplateMappingResolver {
-  resolveTabValues(ctx: MappingContext): Record<string, string> | Promise<Record<string, string>>;
+  resolveTabValues(ctx: ResolutionContext): Record<string, string>;
 }

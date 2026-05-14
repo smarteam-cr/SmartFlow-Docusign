@@ -1,9 +1,10 @@
 export type {
-  ContactInfo,
-  ContactDetailsInfo,
-  CompanyInfo,
-  LineItemInfo,
-  MappingContext,
+  ResolutionCompany,
+  ResolutionContactoLegal,
+  ResolutionCapex,
+  ResolutionDireccion,
+  ResolutionQuote,
+  ResolutionContext,
   TemplateMappingResolver,
 } from './types.js';
 export { createStaticTemplateMappingResolver } from './StaticTemplateMappingResolver.js';
