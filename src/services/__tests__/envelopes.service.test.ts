@@ -5,13 +5,13 @@ import type {
   TemplateSummary,
 } from '../../integrations/Docusign/index.js';
 import type {
-  Contact,
-  ContactDetails,
+  Capex,
   Company,
-  DealSummary,
+  Contact,
   DealOwner,
+  Direccion,
   HubSpotAdapter,
-  LineItem,
+  Quote,
 } from '../../integrations/HS/index.js';
 import type { TemplateMappingResolver } from '../../lib/template-mapping/index.js';
 import type { TemplateRolesResolver } from '../../lib/template-roles/index.js';
@@ -34,32 +34,30 @@ const grace: Contact = {
   firstName: 'Grace',
   lastName: 'Hopper',
   email: 'grace@navy.mil',
-  docIdentificacion: '',
-};
-
-const adaDetails: ContactDetails = {
-  id: 'c-ada',
-  identification: 'CC-12345',
-  country: 'Colombia',
-};
-
-const fullDeal: DealSummary = {
-  id: '12345',
-  currencyCode: 'USD',
+  docIdentificacion: 'CC-99999',
 };
 
 const fullCompany: Company = {
   id: 'co-1',
-  razonSocial: 'ACME Inc',
-  pais: 'Colombia',
+  razonSocial: 'SIGMA ALIMENTOS',
+  pais: 'MX',
 };
 
-const fullLineItem: LineItem = {
-  id: 'li-1',
-  name: 'Producto X',
-  sku: 'SKU-001',
-  price: '1000',
-};
+const fullCapex: Capex[] = [
+  {
+    id: 'cx-1',
+    qrCapex: 'Q-A',
+    nombre: 'Equipo A',
+    cantidad: '1',
+    costoNeto: '100',
+    hsCreatedate: '2026-01-01',
+  },
+];
+
+const direccionA: Direccion = { id: 'dir-A', direction: 'Calle A' };
+const direccionB: Direccion = { id: 'dir-B', direction: 'Calle B' };
+
+const fullQuote: Quote = { id: 'q-1', hsQuoteLink: 'https://hubspot.com/q1' };
 
 const dealOwner: DealOwner = {
   id: 'owner-55555',
@@ -76,30 +74,44 @@ const proveedorContact: Contact = {
 };
 
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
-  return {
+  const fake: HubSpotAdapter = {
     getDealContacts: jest
       .fn<HubSpotAdapter['getDealContacts']>()
       .mockResolvedValue([ada, grace]),
-    getContactDetails: jest
-      .fn<HubSpotAdapter['getContactDetails']>()
-      .mockResolvedValue(adaDetails),
-    getDeal: jest
-      .fn<HubSpotAdapter['getDeal']>()
-      .mockResolvedValue(fullDeal),
-    getDealPrimaryCompany: jest
-      .fn<HubSpotAdapter['getDealPrimaryCompany']>()
-      .mockResolvedValue(fullCompany),
-    getDealLineItem: jest
-      .fn<HubSpotAdapter['getDealLineItem']>()
-      .mockResolvedValue(fullLineItem),
     getDealOwner: jest
       .fn<HubSpotAdapter['getDealOwner']>()
       .mockResolvedValue(dealOwner),
     getContactById: jest
       .fn<HubSpotAdapter['getContactById']>()
       .mockResolvedValue(proveedorContact),
+    findJuridicoContactIds: jest
+      .fn<HubSpotAdapter['findJuridicoContactIds']>()
+      .mockResolvedValue([]),
+    getDealPrimaryCompany: jest
+      .fn<HubSpotAdapter['getDealPrimaryCompany']>()
+      .mockResolvedValue(fullCompany),
+    getDealCapex: jest
+      .fn<HubSpotAdapter['getDealCapex']>()
+      .mockResolvedValue(fullCapex),
+    getCompanyDirecciones: jest
+      .fn<HubSpotAdapter['getCompanyDirecciones']>()
+      .mockResolvedValue([direccionA]),
+    getDealLatestQuote: jest
+      .fn<HubSpotAdapter['getDealLatestQuote']>()
+      .mockResolvedValue(fullQuote),
+    // Legacy methods removed in Task 11; stubbed here so the interface compiles.
+    getContactDetails: jest
+      .fn<HubSpotAdapter['getContactDetails']>()
+      .mockRejectedValue(new Error('getContactDetails should not be called')),
+    getDeal: jest
+      .fn<HubSpotAdapter['getDeal']>()
+      .mockRejectedValue(new Error('getDeal should not be called')),
+    getDealLineItem: jest
+      .fn<HubSpotAdapter['getDealLineItem']>()
+      .mockRejectedValue(new Error('getDealLineItem should not be called')),
     ...overrides,
   };
+  return fake;
 }
 
 function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAdapter {
@@ -114,18 +126,20 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
   };
 }
 
-const fullTabs: Record<string, string> = {
-  Nombre: 'Ada',
-  Apellido: 'Lovelace',
-  NumeroIdentificacionComodatario: 'CC-12345',
-  PaisContactoComodatario: 'Colombia',
-  EmpresaComodatario: 'ACME Inc',
-  PaisEmpresaComodatario: 'Colombia',
-  DireccionEmpresaComodatario: 'Calle 100 #5-30',
-  NombreProducto: 'Producto X',
-  SkuProducto: 'SKU-001',
-  PrecioProducto: '1000',
-  Moneda: 'USD',
+const stubResolvedTabs: Record<string, string> = {
+  RazonSocial: 'SIGMA ALIMENTOS',
+  PaisRazonSocial: 'MX',
+  NombreCliente: 'Ada',
+  ApellidosCliente: 'Lovelace',
+  DocIdentCliente: 'CC-12345',
+  DirecUbiComodato: 'Calle A',
+  '#HREF_UrlCotizacion': 'https://hubspot.com/q1',
+  QrCpx1: 'Q-A', NombreCpx1: 'Equipo A', CantidadCpx1: '1', CostoCpx1: '100',
+  QrCpx2: '', NombreCpx2: '', CantidadCpx2: '', CostoCpx2: '',
+  QrCpx3: '', NombreCpx3: '', CantidadCpx3: '', CostoCpx3: '',
+  QrCpx4: '', NombreCpx4: '', CantidadCpx4: '', CostoCpx4: '',
+  QrCpx5: '', NombreCpx5: '', CantidadCpx5: '', CostoCpx5: '',
+  QrCpx6: '', NombreCpx6: '', CantidadCpx6: '', CostoCpx6: '',
 };
 
 function makeFakeMapping(
@@ -134,7 +148,7 @@ function makeFakeMapping(
   return {
     resolveTabValues: jest
       .fn<TemplateMappingResolver['resolveTabValues']>()
-      .mockReturnValue(fullTabs),
+      .mockReturnValue(stubResolvedTabs),
     ...overrides,
   };
 }
@@ -150,8 +164,8 @@ function makeFakeTemplateRoles(
   };
 }
 
-describe('envelopes.service', () => {
-  test('happy path: 3 firmantes Propietario→Proveedor→Cliente con tabs en Propietario', async () => {
+describe('envelopes.service — happy paths', () => {
+  test('3 firmantes Propietario→Proveedor→Cliente, tabs solo en Propietario, fallback al contactId del request cuando no hay jurídico', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
@@ -176,22 +190,23 @@ describe('envelopes.service', () => {
       recipientEmail: 'maria@proveedor.co',
     });
 
-    expect(hubspot.getDealContacts).toHaveBeenCalledWith('12345');
-    expect(hubspot.getDealOwner).toHaveBeenCalledWith('12345');
-    expect(hubspot.getContactById).toHaveBeenCalledWith('c-proveedor');
-    expect(hubspot.getContactDetails).toHaveBeenCalledWith('c-ada');
-    expect(hubspot.getDeal).toHaveBeenCalledWith('12345');
-    expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledWith('12345');
-    expect(hubspot.getDealLineItem).toHaveBeenCalledWith('12345');
+    expect(hubspot.findJuridicoContactIds).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealCapex).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealLatestQuote).toHaveBeenCalledWith('12345');
+    expect(hubspot.getCompanyDirecciones).toHaveBeenCalledWith('co-1');
     expect(templateRoles.getProveedorContactId).toHaveBeenCalledWith('tpl-abc');
 
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
-      contact: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@math.org' },
-      contactDetails: { identification: 'CC-12345', country: 'Colombia' },
-      company: { name: 'ACME Inc', country: 'Colombia', address: 'Calle 100 #5-30' },
-      lineItem: { name: 'Producto X', sku: 'SKU-001', price: '1000' },
-      dealCurrencyCode: 'USD',
+      company: { razonSocial: 'SIGMA ALIMENTOS', pais: 'MX' },
+      contactoLegal: {
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        docIdentificacion: 'CC-12345',
+      },
+      capex: [{ qrCapex: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
+      direccion: { direction: 'Calle A' },
+      quote: { hsQuoteLink: 'https://hubspot.com/q1' },
     });
 
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith({
@@ -202,7 +217,7 @@ describe('envelopes.service', () => {
           name: 'Carlos Owner',
           email: 'carlos@empresa.co',
           routingOrder: 1,
-          tabs: fullTabs,
+          tabs: stubResolvedTabs,
         },
         {
           roleName: 'Proveedor',
@@ -220,7 +235,125 @@ describe('envelopes.service', () => {
     });
   });
 
-  test('throws NO_CONTACTS_FOR_DEAL when contact list is empty', async () => {
+  test('Propietario lleva el tab #HREF_UrlCotizacion entre los prefillTabs', async () => {
+    const hubspot = makeFakeHubspot();
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    const call = (docusign.sendEnvelopeFromTemplate as jest.Mock).mock
+      .calls[0]![0] as { roles: Array<{ roleName: string; tabs?: Record<string, string> }> };
+    const propietario = call.roles.find((r) => r.roleName === 'Propietario');
+    expect(propietario?.tabs?.['#HREF_UrlCotizacion']).toBe('https://hubspot.com/q1');
+    const proveedor = call.roles.find((r) => r.roleName === 'Proveedor');
+    expect(proveedor?.tabs).toBeUndefined();
+    const cliente = call.roles.find((r) => r.roleName === 'Cliente');
+    expect(cliente?.tabs).toBeUndefined();
+  });
+
+  test('happy path con 1 jurídico: el contacto Cliente es el jurídico, no el del request', async () => {
+    const juridico: Contact = {
+      id: 'c-juridico',
+      firstName: 'Don',
+      lastName: 'Jurídico',
+      email: 'juridico@empresa.co',
+      docIdentificacion: 'CC-J-999',
+    };
+    const hubspot = makeFakeHubspot({
+      findJuridicoContactIds: jest
+        .fn<HubSpotAdapter['findJuridicoContactIds']>()
+        .mockResolvedValue(['c-juridico']),
+      getContactById: jest
+        .fn<HubSpotAdapter['getContactById']>()
+        // Proveedor lookup first, then juridico lookup
+        .mockResolvedValueOnce(proveedorContact)
+        .mockResolvedValueOnce(juridico),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    const call = (docusign.sendEnvelopeFromTemplate as jest.Mock).mock
+      .calls[0]![0] as { roles: Array<{ roleName: string; email: string; name: string }> };
+    const cliente = call.roles.find((r) => r.roleName === 'Cliente');
+    expect(cliente?.email).toBe('juridico@empresa.co');
+    expect(cliente?.name).toBe('Don Jurídico');
+  });
+
+  test('happy path con directionId específico: usa esa dirección, no la primera', async () => {
+    const hubspot = makeFakeHubspot({
+      getCompanyDirecciones: jest
+        .fn<HubSpotAdapter['getCompanyDirecciones']>()
+        .mockResolvedValue([direccionA, direccionB]),
+    });
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+      directionId: 'dir-B',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { direccion: { direction: string } | null };
+    expect(ctxArg.direccion).toEqual({ direction: 'Calle B' });
+  });
+
+  test('sin direcciones en la company: direccion null en el contexto, sin error', async () => {
+    const hubspot = makeFakeHubspot({
+      getCompanyDirecciones: jest
+        .fn<HubSpotAdapter['getCompanyDirecciones']>()
+        .mockResolvedValue([]),
+    });
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { direccion: unknown };
+    expect(ctxArg.direccion).toBeNull();
+  });
+});
+
+describe('envelopes.service — errores estructurales', () => {
+  test('NO_CONTACTS_FOR_DEAL si el deal no tiene contactos con email', async () => {
     const hubspot = makeFakeHubspot({
       getDealContacts: jest
         .fn<HubSpotAdapter['getDealContacts']>()
@@ -234,15 +367,11 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({
-        dealId: '12345',
-        templateId: 'tpl-abc',
-        contactId: 'c-ada',
-      })
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'NO_CONTACTS_FOR_DEAL', httpStatus: 404 });
   });
 
-  test('throws CONTACT_NOT_IN_DEAL when contactId is not in the list', async () => {
+  test('CONTACT_NOT_IN_DEAL si el contactId del request no está en el Deal', async () => {
     const service = createEnvelopesService({
       hubspot: makeFakeHubspot(),
       docusign: makeFakeDocusign(),
@@ -251,53 +380,11 @@ describe('envelopes.service', () => {
     });
 
     await expect(
-      service.sendFromTemplate({
-        dealId: '12345',
-        templateId: 'tpl-abc',
-        contactId: 'c-stranger',
-      })
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-stranger' })
     ).rejects.toMatchObject({ code: 'CONTACT_NOT_IN_DEAL', httpStatus: 422 });
   });
 
-  test('propagates DEAL_NOT_FOUND from hubspot.getDealContacts', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealContacts: jest
-        .fn<HubSpotAdapter['getDealContacts']>()
-        .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
-    });
-    const service = createEnvelopesService({
-      hubspot,
-      docusign: makeFakeDocusign(),
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '99', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'DEAL_NOT_FOUND', httpStatus: 404 });
-  });
-
-  test('propagates DOCUSIGN_UNAVAILABLE from sendEnvelopeFromTemplate', async () => {
-    const docusign = makeFakeDocusign({
-      sendEnvelopeFromTemplate: jest
-        .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
-        .mockRejectedValue(
-          new ExternalServiceError('DOCUSIGN_UNAVAILABLE', 'caído', undefined)
-        ),
-    });
-    const service = createEnvelopesService({
-      hubspot: makeFakeHubspot(),
-      docusign,
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'DOCUSIGN_UNAVAILABLE', httpStatus: 502 });
-  });
-
-  test('throws CONTACT_EMAIL_MISSING (defensive) if chosen contact has empty email', async () => {
+  test('CONTACT_EMAIL_MISSING (defensivo) si el chosen contact tiene email vacío', async () => {
     const noEmail: Contact = {
       id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '', docIdentificacion: '',
     };
@@ -318,124 +405,7 @@ describe('envelopes.service', () => {
     ).rejects.toMatchObject({ code: 'CONTACT_EMAIL_MISSING', httpStatus: 422 });
   });
 
-  test('propagates DEAL_LINE_ITEMS_INVALID when adapter throws (0 line items)', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealLineItem: jest
-        .fn<HubSpotAdapter['getDealLineItem']>()
-        .mockRejectedValue(
-          new ValidationError('DEAL_LINE_ITEMS_INVALID', '0 encontrados', undefined)
-        ),
-    });
-    const docusign = makeFakeDocusign();
-    const service = createEnvelopesService({
-      hubspot,
-      docusign,
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'DEAL_LINE_ITEMS_INVALID', httpStatus: 422 });
-
-    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
-  });
-
-  test('propagates DEAL_HAS_NO_COMPANY when Deal has no primary company', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealPrimaryCompany: jest
-        .fn<HubSpotAdapter['getDealPrimaryCompany']>()
-        .mockRejectedValue(
-          new ValidationError('DEAL_HAS_NO_COMPANY', 'sin primary', undefined)
-        ),
-    });
-    const docusign = makeFakeDocusign();
-    const service = createEnvelopesService({
-      hubspot,
-      docusign,
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'DEAL_HAS_NO_COMPANY', httpStatus: 422 });
-
-    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
-  });
-
-  test('no lanza cuando el resolver devuelve campos vacíos (tolerancia field-level v2)', async () => {
-    const templateMapping = makeFakeMapping({
-      resolveTabValues: jest
-        .fn<TemplateMappingResolver['resolveTabValues']>()
-        .mockReturnValue({
-          ...fullTabs,
-          NumeroIdentificacionComodatario: '',
-          DireccionEmpresaComodatario: '',
-          SkuProducto: '   ',
-        }),
-    });
-    const docusign = makeFakeDocusign();
-    const service = createEnvelopesService({
-      hubspot: makeFakeHubspot(),
-      docusign,
-      templateMapping,
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    const result = await service.sendFromTemplate({
-      dealId: '12345',
-      templateId: 'tpl',
-      contactId: 'c-ada',
-    });
-
-    expect(result.envelopeId).toBeDefined();
-    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
-
-    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        roles: expect.arrayContaining([
-          expect.objectContaining({
-            roleName: 'Propietario',
-            tabs: expect.objectContaining({
-              NumeroIdentificacionComodatario: '',
-              DireccionEmpresaComodatario: '',
-              SkuProducto: '   ',
-            }),
-          }),
-        ]),
-      })
-    );
-  });
-
-  test('happy path consulta las 4 fetches paralelas y las 2 fetches previas (owner + proveedor)', async () => {
-    const hubspot = makeFakeHubspot();
-    const docusign = makeFakeDocusign();
-    const service = createEnvelopesService({
-      hubspot,
-      docusign,
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-
-    await service.sendFromTemplate({
-      dealId: '12345',
-      templateId: 'tpl-abc',
-      contactId: 'c-ada',
-    });
-
-    expect(hubspot.getDealOwner).toHaveBeenCalledTimes(1);
-    expect(hubspot.getContactById).toHaveBeenCalledTimes(1);
-    expect(hubspot.getContactDetails).toHaveBeenCalledTimes(1);
-    expect(hubspot.getDeal).toHaveBeenCalledTimes(1);
-    expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledTimes(1);
-    expect(hubspot.getDealLineItem).toHaveBeenCalledTimes(1);
-    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
-  });
-
-  // ─── New tests for Plan 8 / F2 ─────────────────────────────────────────
-
-  test('lanza DEAL_OWNER_MISSING cuando el deal no tiene propietario', async () => {
+  test('DEAL_OWNER_MISSING propagado del adapter', async () => {
     const hubspot = makeFakeHubspot({
       getDealOwner: jest
         .fn<HubSpotAdapter['getDealOwner']>()
@@ -452,24 +422,7 @@ describe('envelopes.service', () => {
     ).rejects.toMatchObject({ code: 'DEAL_OWNER_MISSING', httpStatus: 422 });
   });
 
-  test('lanza OWNER_EMAIL_MISSING cuando el owner no tiene email', async () => {
-    const hubspot = makeFakeHubspot({
-      getDealOwner: jest
-        .fn<HubSpotAdapter['getDealOwner']>()
-        .mockRejectedValue(new ValidationError('OWNER_EMAIL_MISSING', '...', undefined)),
-    });
-    const service = createEnvelopesService({
-      hubspot,
-      docusign: makeFakeDocusign(),
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'OWNER_EMAIL_MISSING', httpStatus: 422 });
-  });
-
-  test('lanza PROVEEDOR_NOT_CONFIGURED cuando el templateId no está en el mapa', async () => {
+  test('PROVEEDOR_NOT_CONFIGURED cuando el templateId no está mapeado', async () => {
     const templateRoles = makeFakeTemplateRoles({
       getProveedorContactId: jest
         .fn<TemplateRolesResolver['getProveedorContactId']>()
@@ -490,26 +443,7 @@ describe('envelopes.service', () => {
     ).rejects.toMatchObject({ code: 'PROVEEDOR_NOT_CONFIGURED', httpStatus: 422 });
   });
 
-  test('lanza PROVEEDOR_CONTACT_NOT_FOUND cuando el contacto proveedor no existe en HubSpot', async () => {
-    const hubspot = makeFakeHubspot({
-      getContactById: jest
-        .fn<HubSpotAdapter['getContactById']>()
-        .mockRejectedValue(
-          new ValidationError('PROVEEDOR_CONTACT_NOT_FOUND', '...', undefined)
-        ),
-    });
-    const service = createEnvelopesService({
-      hubspot,
-      docusign: makeFakeDocusign(),
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-    });
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'PROVEEDOR_CONTACT_NOT_FOUND', httpStatus: 422 });
-  });
-
-  test('lanza PROVEEDOR_EMAIL_MISSING cuando el proveedor no tiene email', async () => {
+  test('PROVEEDOR_EMAIL_MISSING cuando el contacto proveedor no tiene email', async () => {
     const hubspot = makeFakeHubspot({
       getContactById: jest
         .fn<HubSpotAdapter['getContactById']>()
@@ -526,5 +460,191 @@ describe('envelopes.service', () => {
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'PROVEEDOR_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  test('CLIENTE_MULTIPLE_JURIDICO si hay >1 jurídico', async () => {
+    const hubspot = makeFakeHubspot({
+      findJuridicoContactIds: jest
+        .fn<HubSpotAdapter['findJuridicoContactIds']>()
+        .mockResolvedValue(['c-j1', 'c-j2']),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'CLIENTE_MULTIPLE_JURIDICO', httpStatus: 422 });
+  });
+
+  test('CLIENTE_EMAIL_MISSING cuando el jurídico no tiene email', async () => {
+    const juridicoSinEmail: Contact = {
+      id: 'c-juridico',
+      firstName: 'Don',
+      lastName: 'J',
+      email: '',
+      docIdentificacion: 'X',
+    };
+    const hubspot = makeFakeHubspot({
+      findJuridicoContactIds: jest
+        .fn<HubSpotAdapter['findJuridicoContactIds']>()
+        .mockResolvedValue(['c-juridico']),
+      getContactById: jest
+        .fn<HubSpotAdapter['getContactById']>()
+        .mockResolvedValueOnce(proveedorContact)
+        .mockResolvedValueOnce(juridicoSinEmail),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'CLIENTE_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  test('QUOTE_NOT_FOUND propagado del adapter', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealLatestQuote: jest
+        .fn<HubSpotAdapter['getDealLatestQuote']>()
+        .mockRejectedValue(new ValidationError('QUOTE_NOT_FOUND', 'sin quote', undefined)),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'QUOTE_NOT_FOUND', httpStatus: 422 });
+  });
+
+  test('CAPEX_TOO_MANY propagado del adapter', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealCapex: jest
+        .fn<HubSpotAdapter['getDealCapex']>()
+        .mockRejectedValue(new ValidationError('CAPEX_TOO_MANY', '7 capex', undefined)),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'CAPEX_TOO_MANY', httpStatus: 422 });
+  });
+
+  test('DIRECTION_NOT_IN_COMPANY cuando el directionId del request no pertenece', async () => {
+    const hubspot = makeFakeHubspot({
+      getCompanyDirecciones: jest
+        .fn<HubSpotAdapter['getCompanyDirecciones']>()
+        .mockResolvedValue([direccionA, direccionB]),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await expect(
+      service.sendFromTemplate({
+        dealId: '12345',
+        templateId: 'tpl',
+        contactId: 'c-ada',
+        directionId: 'dir-ZZZ',
+      })
+    ).rejects.toMatchObject({ code: 'DIRECTION_NOT_IN_COMPANY', httpStatus: 422 });
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('DUPLICATE_RECIPIENT_EMAIL cuando Propietario y Cliente comparten email', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealOwner: jest
+        .fn<HubSpotAdapter['getDealOwner']>()
+        .mockResolvedValue({ id: 'o-1', name: 'C', email: 'ADA@math.org' }),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DUPLICATE_RECIPIENT_EMAIL', httpStatus: 422 });
+  });
+
+  test('DEAL_NOT_FOUND propagado del primer fetch', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockRejectedValue(new NotFoundError('DEAL_NOT_FOUND', 'no existe', undefined)),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '99', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DEAL_NOT_FOUND', httpStatus: 404 });
+  });
+
+  test('DOCUSIGN_UNAVAILABLE propagado del send', async () => {
+    const docusign = makeFakeDocusign({
+      sendEnvelopeFromTemplate: jest
+        .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
+        .mockRejectedValue(
+          new ExternalServiceError('DOCUSIGN_UNAVAILABLE', 'caído', undefined)
+        ),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DOCUSIGN_UNAVAILABLE', httpStatus: 502 });
+  });
+
+  test('tolerancia field-level: resolver con campos vacíos no bloquea el envío', async () => {
+    const emptyTabs = Object.fromEntries(
+      Object.keys(stubResolvedTabs).map((k) => [k, ''])
+    ) as Record<string, string>;
+    const templateMapping = makeFakeMapping({
+      resolveTabValues: jest
+        .fn<TemplateMappingResolver['resolveTabValues']>()
+        .mockReturnValue(emptyTabs),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+    });
+
+    const result = await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl',
+      contactId: 'c-ada',
+    });
+
+    expect(result.envelopeId).toBeDefined();
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
   });
 });

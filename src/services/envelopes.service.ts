@@ -2,15 +2,22 @@ import {
   NotFoundError,
   ValidationError,
 } from '../lib/errors/index.js';
-import type { HubSpotAdapter } from '../integrations/HS/index.js';
+import type {
+  Direccion,
+  HubSpotAdapter,
+} from '../integrations/HS/index.js';
 import type { DocusignAdapter } from '../integrations/Docusign/index.js';
-import type { TemplateMappingResolver } from '../lib/template-mapping/index.js';
+import type {
+  ResolutionContext,
+  TemplateMappingResolver,
+} from '../lib/template-mapping/index.js';
 import type { TemplateRolesResolver } from '../lib/template-roles/index.js';
 
 export interface SendFromTemplateInput {
   dealId: string;
   templateId: string;
   contactId: string;
+  directionId?: string;
 }
 
 export interface SendFromTemplateResult {
@@ -30,10 +37,43 @@ export interface EnvelopesServiceDeps {
   templateRoles: TemplateRolesResolver;
 }
 
+function selectDireccion(
+  direcciones: Direccion[],
+  requestedId: string | undefined
+): Direccion | null {
+  if (requestedId) {
+    const found = direcciones.find((d) => d.id === requestedId);
+    if (!found) {
+      throw new ValidationError(
+        'DIRECTION_NOT_IN_COMPANY',
+        `La dirección ${requestedId} no pertenece a la Company del Deal`,
+        { directionId: requestedId }
+      );
+    }
+    return found;
+  }
+  return direcciones[0] ?? null;
+}
+
+function assertUniqueRecipientEmails(emails: Array<{ role: string; email: string }>): void {
+  const seen = new Map<string, string>();
+  for (const { role, email } of emails) {
+    const key = email.toLowerCase();
+    const previous = seen.get(key);
+    if (previous) {
+      throw new ValidationError(
+        'DUPLICATE_RECIPIENT_EMAIL',
+        `Dos firmantes (${previous} y ${role}) tienen el mismo email. No se permite.`,
+        { rolesConflicting: [previous, role], email }
+      );
+    }
+    seen.set(key, role);
+  }
+}
+
 export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesService {
   return {
     async sendFromTemplate(input: SendFromTemplateInput): Promise<SendFromTemplateResult> {
-      // 1) Re-fetch contact list for this Deal (closes the trust-boundary).
       const contacts = await deps.hubspot.getDealContacts(input.dealId);
       if (contacts.length === 0) {
         throw new NotFoundError(
@@ -43,7 +83,6 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 2) Find the chosen contact (Cliente) in the list; reject if not found.
       const chosen = contacts.find((c) => c.id === input.contactId);
       if (!chosen) {
         throw new ValidationError(
@@ -52,7 +91,6 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
           { dealId: input.dealId, contactId: input.contactId }
         );
       }
-
       if (!chosen.email) {
         throw new ValidationError(
           'CONTACT_EMAIL_MISSING',
@@ -61,11 +99,8 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 3) Resolve Propietario (deal owner). Adapter throws DEAL_OWNER_MISSING /
-      // OWNER_EMAIL_MISSING if the structural data is incomplete.
       const owner = await deps.hubspot.getDealOwner(input.dealId);
 
-      // 4) Resolve Proveedor configured for this template.
       const proveedorContactId = deps.templateRoles.getProveedorContactId(input.templateId);
       if (!proveedorContactId) {
         throw new ValidationError(
@@ -84,43 +119,65 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 5) Fetch extended data in parallel (used to build the tabs).
-      const [contactDetails, deal, company, lineItem] = await Promise.all([
-        deps.hubspot.getContactDetails(input.contactId),
-        deps.hubspot.getDeal(input.dealId),
+      const juridicoIds = await deps.hubspot.findJuridicoContactIds(input.dealId);
+      if (juridicoIds.length > 1) {
+        throw new ValidationError(
+          'CLIENTE_MULTIPLE_JURIDICO',
+          `El Deal ${input.dealId} tiene ${juridicoIds.length} contactos con label responsable_jurídico; sólo se admite uno`,
+          { dealId: input.dealId, juridicoIds }
+        );
+      }
+      const clienteId = juridicoIds[0] ?? input.contactId;
+      const cliente =
+        clienteId === input.contactId
+          ? chosen
+          : await deps.hubspot.getContactById(clienteId);
+      if (!cliente.email) {
+        throw new ValidationError(
+          'CLIENTE_EMAIL_MISSING',
+          `El contacto cliente ${cliente.id} no tiene email — DocuSign lo necesita para enviar`,
+          { dealId: input.dealId, contactId: cliente.id }
+        );
+      }
+
+      const [company, capex, quote] = await Promise.all([
         deps.hubspot.getDealPrimaryCompany(input.dealId),
-        deps.hubspot.getDealLineItem(input.dealId),
+        deps.hubspot.getDealCapex(input.dealId),
+        deps.hubspot.getDealLatestQuote(input.dealId),
       ]);
 
-      // 6) Build mapping context and resolve the 11 tabs (carried by Propietario).
-      const tabs = await deps.templateMapping.resolveTabValues({
+      const direcciones = await deps.hubspot.getCompanyDirecciones(company.id);
+      const direccion = selectDireccion(direcciones, input.directionId);
+
+      assertUniqueRecipientEmails([
+        { role: 'Propietario', email: owner.email },
+        { role: 'Proveedor', email: proveedor.email },
+        { role: 'Cliente', email: cliente.email },
+      ]);
+
+      const ctx: ResolutionContext = {
         templateId: input.templateId,
-        contact: {
-          firstName: chosen.firstName,
-          lastName: chosen.lastName,
-          email: chosen.email,
+        company: { razonSocial: company.razonSocial, pais: company.pais },
+        contactoLegal: {
+          firstName: cliente.firstName,
+          lastName: cliente.lastName,
+          docIdentificacion: cliente.docIdentificacion,
         },
-        contactDetails: {
-          identification: contactDetails.identification,
-          country: contactDetails.country,
-        },
-        company: {
-          name: company.name,
-          country: company.country,
-          address: company.address,
-        },
-        lineItem: {
-          name: lineItem.name,
-          sku: lineItem.sku,
-          price: lineItem.price,
-        },
-        dealCurrencyCode: deal.currencyCode,
-      });
+        capex: capex.map((c) => ({
+          qrCapex: c.qrCapex,
+          nombre: c.nombre,
+          cantidad: c.cantidad,
+          costoNeto: c.costoNeto,
+        })),
+        direccion: direccion ? { direction: direccion.direction } : null,
+        quote: { hsQuoteLink: quote.hsQuoteLink },
+      };
+
+      const tabs = deps.templateMapping.resolveTabValues(ctx);
 
       const proveedorName = `${proveedor.firstName} ${proveedor.lastName}`.trim();
-      const clienteName = `${chosen.firstName} ${chosen.lastName}`.trim();
+      const clienteName = `${cliente.firstName} ${cliente.lastName}`.trim();
 
-      // 7) Send envelope with the 3 sequential signers.
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
         roles: [
@@ -140,7 +197,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
           {
             roleName: 'Cliente',
             name: clienteName,
-            email: chosen.email,
+            email: cliente.email,
             routingOrder: 3,
           },
         ],
