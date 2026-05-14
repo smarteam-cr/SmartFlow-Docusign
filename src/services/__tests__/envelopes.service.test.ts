@@ -99,16 +99,6 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     getDealLatestQuote: jest
       .fn<HubSpotAdapter['getDealLatestQuote']>()
       .mockResolvedValue(fullQuote),
-    // Legacy methods removed in Task 11; stubbed here so the interface compiles.
-    getContactDetails: jest
-      .fn<HubSpotAdapter['getContactDetails']>()
-      .mockRejectedValue(new Error('getContactDetails should not be called')),
-    getDeal: jest
-      .fn<HubSpotAdapter['getDeal']>()
-      .mockRejectedValue(new Error('getDeal should not be called')),
-    getDealLineItem: jest
-      .fn<HubSpotAdapter['getDealLineItem']>()
-      .mockRejectedValue(new Error('getDealLineItem should not be called')),
     ...overrides,
   };
   return fake;

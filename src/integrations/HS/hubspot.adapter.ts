@@ -15,28 +15,10 @@ export interface Contact {
   docIdentificacion: string;
 }
 
-export interface ContactDetails {
-  id: string;
-  identification: string;
-  country: string;
-}
-
-export interface DealSummary {
-  id: string;
-  currencyCode: string;
-}
-
 export interface Company {
   id: string;
   razonSocial: string;
   pais: string;
-}
-
-export interface LineItem {
-  id: string;
-  name: string;
-  sku: string;
-  price: string;
 }
 
 export interface DealOwner {
@@ -76,23 +58,6 @@ export interface HubSpotAdapter {
   getDealContacts(dealId: string): Promise<Contact[]>;
 
   /**
-   * Reads extended properties of a single contact (identification + country).
-   * Used by the envelope flow to fill DocuSign tabs that are NOT exposed in
-   * the lightweight contact list endpoint (PII separation).
-   *
-   * @throws NotFoundError(CONTACT_NOT_FOUND) if HubSpot returns 404
-   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
-   */
-  getContactDetails(contactId: string): Promise<ContactDetails>;
-
-  /**
-   * Reads top-level Deal properties needed by the envelope flow (currency).
-   * @throws NotFoundError(DEAL_NOT_FOUND)
-   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
-   */
-  getDeal(dealId: string): Promise<DealSummary>;
-
-  /**
    * Returns the company marked as Primary for this Deal in HubSpot.
    * Detection: filters association results whose `associationTypes[].label`
    * matches "Primary" (case-insensitive).
@@ -102,17 +67,6 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getDealPrimaryCompany(dealId: string): Promise<Company>;
-
-  /**
-   * Returns the SINGLE line item associated to this Deal. Throws if the Deal
-   * has zero or more than one line item — the demo design supports only deals
-   * with exactly one product (Roadmap §15 R1 contemplates dropdown for many).
-   *
-   * @throws ValidationError(DEAL_LINE_ITEMS_INVALID) if 0 or >1
-   * @throws NotFoundError(DEAL_NOT_FOUND)
-   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
-   */
-  getDealLineItem(dealId: string): Promise<LineItem>;
 
   /**
    * Returns the HubSpot Owner assigned to the Deal (Propietario in v2 routing).
@@ -270,73 +224,6 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         .filter((c) => c.id !== '' && c.email !== '');
     },
 
-    async getContactDetails(contactId: string): Promise<ContactDetails> {
-      const url =
-        `${HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}` +
-        `?properties=documento_de_identidad,country`;
-
-      const res = await hubspotFetch(url);
-
-      if (res.status === 404) {
-        throw new NotFoundError(
-          'CONTACT_NOT_FOUND',
-          `Contact ${contactId} no existe en HubSpot`,
-          { contactId }
-        );
-      }
-      if (!res.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${res.status} al leer detalles del contacto`,
-          { contactId, status: res.status }
-        );
-      }
-
-      const body = (await res.json()) as {
-        id?: string;
-        properties?: { documento_de_identidad?: string; country?: string };
-      };
-
-      return {
-        id: body.id ?? contactId,
-        identification: body.properties?.documento_de_identidad?.trim() ?? '',
-        country: body.properties?.country?.trim() ?? '',
-      };
-    },
-
-    async getDeal(dealId: string): Promise<DealSummary> {
-      const url =
-        `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}` +
-        `?properties=deal_currency_code`;
-
-      const res = await hubspotFetch(url);
-
-      if (res.status === 404) {
-        throw new NotFoundError(
-          'DEAL_NOT_FOUND',
-          `Deal ${dealId} no existe en HubSpot`,
-          { dealId }
-        );
-      }
-      if (!res.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${res.status} al leer el Deal`,
-          { dealId, status: res.status }
-        );
-      }
-
-      const body = (await res.json()) as {
-        id?: string;
-        properties?: { deal_currency_code?: string };
-      };
-
-      return {
-        id: body.id ?? dealId,
-        currencyCode: body.properties?.deal_currency_code?.trim() ?? '',
-      };
-    },
-
     async getDealPrimaryCompany(dealId: string): Promise<Company> {
       const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/companies`;
       const assocRes = await hubspotFetch(assocUrl);
@@ -406,74 +293,6 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         id: companyBody.id ?? companyId,
         razonSocial: companyBody.properties?.raz_n_social__c?.trim() ?? '',
         pais: companyBody.properties?.pais?.trim() ?? '',
-      };
-    },
-
-    async getDealLineItem(dealId: string): Promise<LineItem> {
-      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/line_items`;
-      const assocRes = await hubspotFetch(assocUrl);
-
-      if (assocRes.status === 404) {
-        throw new NotFoundError('DEAL_NOT_FOUND', `Deal ${dealId} no existe en HubSpot`, {
-          dealId,
-        });
-      }
-      if (!assocRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${assocRes.status} al leer associations a line_items`,
-          { dealId, status: assocRes.status }
-        );
-      }
-
-      const assocBody = (await assocRes.json()) as {
-        results?: Array<{ toObjectId?: string | number }>;
-      };
-      const ids = (assocBody.results ?? [])
-        .map((r) => r.toObjectId)
-        .filter((id): id is string | number => id !== undefined && id !== null)
-        .map((id) => String(id));
-
-      if (ids.length !== 1) {
-        throw new ValidationError(
-          'DEAL_LINE_ITEMS_INVALID',
-          `El Deal ${dealId} debe tener exactamente un line item (encontrados: ${ids.length})`,
-          { dealId, lineItemCount: ids.length }
-        );
-      }
-
-      const lineItemId = ids[0] as string;
-
-      const liUrl =
-        `${HUBSPOT_BASE_URL}/crm/v3/objects/line_items/${encodeURIComponent(lineItemId)}` +
-        `?properties=name,hs_sku,price`;
-      const liRes = await hubspotFetch(liUrl);
-
-      if (liRes.status === 404) {
-        throw new ValidationError(
-          'DEAL_LINE_ITEMS_INVALID',
-          `El line item ${lineItemId} del Deal ${dealId} fue eliminado o archivado`,
-          { dealId, lineItemId }
-        );
-      }
-      if (!liRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${liRes.status} al leer line item ${lineItemId}`,
-          { dealId, lineItemId, status: liRes.status }
-        );
-      }
-
-      const liBody = (await liRes.json()) as {
-        id?: string;
-        properties?: { name?: string; hs_sku?: string; price?: string };
-      };
-
-      return {
-        id: liBody.id ?? lineItemId,
-        name: liBody.properties?.name?.trim() ?? '',
-        sku: liBody.properties?.hs_sku?.trim() ?? '',
-        price: liBody.properties?.price?.trim() ?? '',
       };
     },
 
