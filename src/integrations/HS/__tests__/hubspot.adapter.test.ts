@@ -20,6 +20,55 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('HubSpotAdapter.getDealContacts', () => {
+  test('retorna contactos con docIdentificacion del batch read', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'c-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [{
+            id: 'c-1',
+            properties: {
+              firstname: 'Ada',
+              lastname: 'Lovelace',
+              email: 'ada@math.org',
+              doc_identificacion: 'CC-99999',
+            },
+          }],
+        },
+      },
+    ]);
+
+    const contacts = await adapter.getDealContacts('d-1');
+    expect(contacts).toEqual([{
+      id: 'c-1',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@math.org',
+      docIdentificacion: 'CC-99999',
+    }]);
+  });
+
+  test('tolera doc_identificacion ausente en algunos contactos', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'c-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [{
+            id: 'c-1',
+            properties: { firstname: 'X', lastname: 'Y', email: 'x@y.co' },
+          }],
+        },
+      },
+    ]);
+
+    const contacts = await adapter.getDealContacts('d-1');
+    expect(contacts[0]?.docIdentificacion).toBe('');
+  });
+});
+
 describe('HubSpotAdapter.getDealPrimaryCompany', () => {
   test('retorna razonSocial y pais desde raz_n_social__c y pais', async () => {
     mockFetchSequence([
@@ -70,13 +119,18 @@ describe('HubSpotAdapter.getDealPrimaryCompany', () => {
 });
 
 describe('HubSpotAdapter.getContactById', () => {
-  test('happy path: retorna contacto con nombre y email', async () => {
+  test('happy path: retorna contacto con nombre, email y docIdentificacion', async () => {
     mockFetchSequence([
       {
         status: 200,
         body: {
           id: 'c-proveedor',
-          properties: { firstname: 'María', lastname: 'Gómez', email: 'maria@proveedor.co' },
+          properties: {
+            firstname: 'María',
+            lastname: 'Gómez',
+            email: 'maria@proveedor.co',
+            doc_identificacion: 'V-12345',
+          },
         },
       },
     ]);
@@ -87,7 +141,23 @@ describe('HubSpotAdapter.getContactById', () => {
       firstName: 'María',
       lastName: 'Gómez',
       email: 'maria@proveedor.co',
+      docIdentificacion: 'V-12345',
     });
+  });
+
+  test('doc_identificacion ausente devuelve string vacío', async () => {
+    mockFetchSequence([
+      {
+        status: 200,
+        body: {
+          id: 'c-1',
+          properties: { firstname: 'Ana', lastname: 'P', email: 'ana@x.co' },
+        },
+      },
+    ]);
+
+    const contact = await adapter.getContactById('c-1');
+    expect(contact.docIdentificacion).toBe('');
   });
 
   test('lanza PROVEEDOR_CONTACT_NOT_FOUND cuando el contacto no existe (404)', async () => {

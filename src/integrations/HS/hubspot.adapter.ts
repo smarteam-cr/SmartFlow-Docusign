@@ -12,6 +12,7 @@ export interface Contact {
   firstName: string;
   lastName: string;
   email: string;
+  docIdentificacion: string;
 }
 
 export interface ContactDetails {
@@ -176,7 +177,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         method: 'POST',
         body: JSON.stringify({
           inputs: contactIds.map((id) => ({ id })),
-          properties: ['firstname', 'lastname', 'email'],
+          properties: ['firstname', 'lastname', 'email', 'doc_identificacion'],
         }),
       });
 
@@ -191,7 +192,12 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       const batchBody = (await batchRes.json()) as {
         results?: Array<{
           id?: string;
-          properties?: { firstname?: string; lastname?: string; email?: string };
+          properties?: {
+            firstname?: string;
+            lastname?: string;
+            email?: string;
+            doc_identificacion?: string;
+          };
         }>;
       };
 
@@ -201,6 +207,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
           firstName: r.properties?.firstname?.trim() ?? '',
           lastName: r.properties?.lastname?.trim() ?? '',
           email: r.properties?.email?.trim() ?? '',
+          docIdentificacion: r.properties?.doc_identificacion?.trim() ?? '',
         }))
         .filter((c) => c.id !== '' && c.email !== '');
     },
@@ -483,7 +490,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     async getContactById(contactId: string): Promise<Contact> {
       const url =
         `${HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}` +
-        `?properties=firstname,lastname,email`;
+        `?properties=firstname,lastname,email,doc_identificacion`;
       const res = await hubspotFetch(url);
 
       if (res.status === 404) {
@@ -503,7 +510,12 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const body = (await res.json()) as {
         id?: string;
-        properties?: { firstname?: string; lastname?: string; email?: string };
+        properties?: {
+          firstname?: string;
+          lastname?: string;
+          email?: string;
+          doc_identificacion?: string;
+        };
       };
 
       return {
@@ -511,6 +523,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         firstName: body.properties?.firstname?.trim() ?? '',
         lastName: body.properties?.lastname?.trim() ?? '',
         email: body.properties?.email?.trim() ?? '',
+        docIdentificacion: body.properties?.doc_identificacion?.trim() ?? '',
       };
     },
   };

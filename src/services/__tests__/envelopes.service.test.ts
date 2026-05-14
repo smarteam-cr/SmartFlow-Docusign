@@ -26,6 +26,7 @@ const ada: Contact = {
   firstName: 'Ada',
   lastName: 'Lovelace',
   email: 'ada@math.org',
+  docIdentificacion: 'CC-12345',
 };
 
 const grace: Contact = {
@@ -33,6 +34,7 @@ const grace: Contact = {
   firstName: 'Grace',
   lastName: 'Hopper',
   email: 'grace@navy.mil',
+  docIdentificacion: '',
 };
 
 const adaDetails: ContactDetails = {
@@ -70,6 +72,7 @@ const proveedorContact: Contact = {
   firstName: 'María',
   lastName: 'Gómez',
   email: 'maria@proveedor.co',
+  docIdentificacion: '',
 };
 
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
@@ -295,7 +298,9 @@ describe('envelopes.service', () => {
   });
 
   test('throws CONTACT_EMAIL_MISSING (defensive) if chosen contact has empty email', async () => {
-    const noEmail: Contact = { id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '' };
+    const noEmail: Contact = {
+      id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '', docIdentificacion: '',
+    };
     const hubspot = makeFakeHubspot({
       getDealContacts: jest
         .fn<HubSpotAdapter['getDealContacts']>()
@@ -508,7 +513,9 @@ describe('envelopes.service', () => {
     const hubspot = makeFakeHubspot({
       getContactById: jest
         .fn<HubSpotAdapter['getContactById']>()
-        .mockResolvedValue({ id: 'c-prov', firstName: 'María', lastName: 'G', email: '' }),
+        .mockResolvedValue({
+          id: 'c-prov', firstName: 'María', lastName: 'G', email: '', docIdentificacion: '',
+        }),
     });
     const service = createEnvelopesService({
       hubspot,
