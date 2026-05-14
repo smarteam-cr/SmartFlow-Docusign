@@ -20,6 +20,55 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('HubSpotAdapter.getDealPrimaryCompany', () => {
+  test('retorna razonSocial y pais desde raz_n_social__c y pais', async () => {
+    mockFetchSequence([
+      {
+        status: 200,
+        body: {
+          results: [{
+            toObjectId: 'co-1',
+            associationTypes: [{ category: 'HUBSPOT_DEFINED', label: 'Primary' }],
+          }],
+        },
+      },
+      {
+        status: 200,
+        body: { id: 'co-1', properties: { raz_n_social__c: 'SIGMA ALIMENTOS', pais: 'MX' } },
+      },
+    ]);
+
+    const company = await adapter.getDealPrimaryCompany('d-1');
+    expect(company).toEqual({ id: 'co-1', razonSocial: 'SIGMA ALIMENTOS', pais: 'MX' });
+  });
+
+  test('tolera raz_n_social__c y pais vacíos (devuelve strings vacíos)', async () => {
+    mockFetchSequence([
+      {
+        status: 200,
+        body: {
+          results: [{
+            toObjectId: 'co-2',
+            associationTypes: [{ category: 'HUBSPOT_DEFINED', label: 'Primary' }],
+          }],
+        },
+      },
+      { status: 200, body: { id: 'co-2', properties: {} } },
+    ]);
+
+    const company = await adapter.getDealPrimaryCompany('d-1');
+    expect(company).toEqual({ id: 'co-2', razonSocial: '', pais: '' });
+  });
+
+  test('lanza DEAL_HAS_NO_COMPANY cuando no hay association Primary', async () => {
+    mockFetchSequence([{ status: 200, body: { results: [] } }]);
+    await expect(adapter.getDealPrimaryCompany('d-1')).rejects.toMatchObject({
+      code: 'DEAL_HAS_NO_COMPANY',
+      httpStatus: 422,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getContactById', () => {
   test('happy path: retorna contacto con nombre y email', async () => {
     mockFetchSequence([

@@ -48,9 +48,8 @@ const fullDeal: DealSummary = {
 
 const fullCompany: Company = {
   id: 'co-1',
-  name: 'ACME Inc',
-  country: 'Colombia',
-  address: 'Calle 100 #5-30',
+  razonSocial: 'ACME Inc',
+  pais: 'Colombia',
 };
 
 const fullLineItem: LineItem = {

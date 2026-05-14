@@ -27,9 +27,8 @@ export interface DealSummary {
 
 export interface Company {
   id: string;
-  name: string;
-  country: string;
-  address: string;
+  razonSocial: string;
+  pais: string;
 }
 
 export interface LineItem {
@@ -315,7 +314,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const companyUrl =
         `${HUBSPOT_BASE_URL}/crm/v3/objects/companies/${encodeURIComponent(companyId)}` +
-        `?properties=name,country,address`;
+        `?properties=raz_n_social__c,pais`;
       const companyRes = await hubspotFetch(companyUrl);
 
       if (companyRes.status === 404) {
@@ -335,14 +334,13 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const companyBody = (await companyRes.json()) as {
         id?: string;
-        properties?: { name?: string; country?: string; address?: string };
+        properties?: { raz_n_social__c?: string; pais?: string };
       };
 
       return {
         id: companyBody.id ?? companyId,
-        name: companyBody.properties?.name?.trim() ?? '',
-        country: companyBody.properties?.country?.trim() ?? '',
-        address: companyBody.properties?.address?.trim() ?? '',
+        razonSocial: companyBody.properties?.raz_n_social__c?.trim() ?? '',
+        pais: companyBody.properties?.pais?.trim() ?? '',
       };
     },
 
