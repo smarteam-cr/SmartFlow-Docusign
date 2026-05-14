@@ -7,6 +7,12 @@ import {
 const HUBSPOT_BASE_URL = 'https://api.hubapi.com';
 const HUBSPOT_TIMEOUT_MS = 10_000;
 
+/**
+ * Hard limit on capex per Deal. Mirrors the template DocuSign which has 6
+ * fixed rows. Beyond this the data can't be rendered, so the adapter blocks.
+ */
+export const MAX_CAPEX_PER_DEAL = 6;
+
 export interface Contact {
   id: string;
   firstName: string;
@@ -154,66 +160,85 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     }
   }
 
+  // v4 associations: GET /crm/v4/objects/{fromObject}/{fromId}/associations/{toObject}
+  // Used as the first step of any "list associated objects then batch-read them" flow.
+  async function fetchAssociationIds(
+    fromObject: string,
+    fromId: string,
+    toObject: string,
+    notFoundCode: string
+  ): Promise<string[]> {
+    const url = `${HUBSPOT_BASE_URL}/crm/v4/objects/${fromObject}/${encodeURIComponent(fromId)}/associations/${toObject}`;
+    const res = await hubspotFetch(url);
+
+    if (res.status === 404) {
+      throw new NotFoundError(
+        notFoundCode,
+        `${fromObject} ${fromId} no existe en HubSpot`,
+        { fromObject, fromId }
+      );
+    }
+    if (!res.ok) {
+      throw new ExternalServiceError(
+        'HUBSPOT_UNAVAILABLE',
+        `HubSpot respondió ${res.status} al leer asociaciones ${fromObject}→${toObject}`,
+        { fromObject, fromId, toObject, status: res.status }
+      );
+    }
+
+    const body = (await res.json()) as {
+      results?: Array<{ toObjectId?: string | number }>;
+    };
+    return (body.results ?? [])
+      .map((r) => r.toObjectId)
+      .filter((id): id is string | number => id !== undefined && id !== null)
+      .map((id) => String(id));
+  }
+
+  // v3 batch read: POST /crm/v3/objects/{objectType}/batch/read
+  // Returns raw results[]; callers map to their public shape.
+  async function batchReadObjects(
+    objectType: string,
+    ids: string[],
+    properties: string[],
+    errorContext: Record<string, unknown>
+  ): Promise<Array<{ id?: string; properties?: Record<string, string | undefined> }>> {
+    const url = `${HUBSPOT_BASE_URL}/crm/v3/objects/${objectType}/batch/read`;
+    const res = await hubspotFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({
+        inputs: ids.map((id) => ({ id })),
+        properties,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new ExternalServiceError(
+        'HUBSPOT_UNAVAILABLE',
+        `HubSpot respondió ${res.status} al batch-read de ${objectType}`,
+        { ...errorContext, status: res.status }
+      );
+    }
+
+    const body = (await res.json()) as {
+      results?: Array<{ id?: string; properties?: Record<string, string | undefined> }>;
+    };
+    return body.results ?? [];
+  }
+
   return {
     async getDealContacts(dealId: string): Promise<Contact[]> {
-      // 1) List associated contact IDs for this Deal.
-      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/contacts`;
-      const assocRes = await hubspotFetch(assocUrl);
+      const ids = await fetchAssociationIds('deals', dealId, 'contacts', 'DEAL_NOT_FOUND');
+      if (ids.length === 0) return [];
 
-      if (assocRes.status === 404) {
-        throw new NotFoundError('DEAL_NOT_FOUND', `Deal ${dealId} no existe en HubSpot`, { dealId });
-      }
-      if (!assocRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${assocRes.status} al leer asociaciones`,
-          { dealId, status: assocRes.status }
-        );
-      }
+      const results = await batchReadObjects(
+        'contacts',
+        ids,
+        ['firstname', 'lastname', 'email', 'doc_identificacion'],
+        { dealId }
+      );
 
-      const assocBody = (await assocRes.json()) as {
-        results?: Array<{ toObjectId?: string | number }>;
-      };
-      const contactIds = (assocBody.results ?? [])
-        .map((r) => r.toObjectId)
-        .filter((id): id is string | number => id !== undefined && id !== null)
-        .map((id) => String(id));
-
-      if (contactIds.length === 0) {
-        return [];
-      }
-
-      // 2) Batch-read properties for all contact IDs in a single call.
-      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/contacts/batch/read`;
-      const batchRes = await hubspotFetch(batchUrl, {
-        method: 'POST',
-        body: JSON.stringify({
-          inputs: contactIds.map((id) => ({ id })),
-          properties: ['firstname', 'lastname', 'email', 'doc_identificacion'],
-        }),
-      });
-
-      if (!batchRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${batchRes.status} al batch-read de contactos`,
-          { dealId, status: batchRes.status }
-        );
-      }
-
-      const batchBody = (await batchRes.json()) as {
-        results?: Array<{
-          id?: string;
-          properties?: {
-            firstname?: string;
-            lastname?: string;
-            email?: string;
-            doc_identificacion?: string;
-          };
-        }>;
-      };
-
-      return (batchBody.results ?? [])
+      return results
         .map((r) => ({
           id: r.id ?? '',
           firstName: r.properties?.firstname?.trim() ?? '',
@@ -405,72 +430,25 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     },
 
     async getDealCapex(dealId: string): Promise<Capex[]> {
-      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/2-58142466`;
-      const assocRes = await hubspotFetch(assocUrl);
+      const ids = await fetchAssociationIds('deals', dealId, '2-58142466', 'DEAL_NOT_FOUND');
 
-      if (assocRes.status === 404) {
-        throw new NotFoundError(
-          'DEAL_NOT_FOUND',
-          `Deal ${dealId} no existe en HubSpot`,
-          { dealId }
-        );
-      }
-      if (!assocRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${assocRes.status} al leer asociaciones a capex`,
-          { dealId, status: assocRes.status }
-        );
-      }
-
-      const assocBody = (await assocRes.json()) as {
-        results?: Array<{ toObjectId?: string | number }>;
-      };
-      const ids = (assocBody.results ?? [])
-        .map((r) => r.toObjectId)
-        .filter((id): id is string | number => id !== undefined && id !== null)
-        .map((id) => String(id));
-
-      if (ids.length > 6) {
+      if (ids.length > MAX_CAPEX_PER_DEAL) {
         throw new ValidationError(
           'CAPEX_TOO_MANY',
-          `El Deal ${dealId} tiene ${ids.length} capex asociados; el máximo permitido es 6`,
-          { dealId, count: ids.length }
+          `El Deal ${dealId} tiene ${ids.length} capex asociados; el máximo permitido es ${MAX_CAPEX_PER_DEAL}`,
+          { dealId, count: ids.length, max: MAX_CAPEX_PER_DEAL }
         );
       }
       if (ids.length === 0) return [];
 
-      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/2-58142466/batch/read`;
-      const batchRes = await hubspotFetch(batchUrl, {
-        method: 'POST',
-        body: JSON.stringify({
-          inputs: ids.map((id) => ({ id })),
-          properties: ['qr_capex', 'nombre', 'cantidad', 'costo_neto', 'hs_createdate'],
-        }),
-      });
+      const results = await batchReadObjects(
+        '2-58142466',
+        ids,
+        ['qr_capex', 'nombre', 'cantidad', 'costo_neto', 'hs_createdate'],
+        { dealId }
+      );
 
-      if (!batchRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${batchRes.status} al batch-read de capex`,
-          { dealId, status: batchRes.status }
-        );
-      }
-
-      const batchBody = (await batchRes.json()) as {
-        results?: Array<{
-          id?: string;
-          properties?: {
-            qr_capex?: string;
-            nombre?: string;
-            cantidad?: string;
-            costo_neto?: string;
-            hs_createdate?: string;
-          };
-        }>;
-      };
-
-      return (batchBody.results ?? [])
+      return results
         .map((r) => ({
           id: r.id ?? '',
           qrCapex: r.properties?.qr_capex?.trim() ?? '',
@@ -483,59 +461,22 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     },
 
     async getCompanyDirecciones(companyId: string): Promise<Direccion[]> {
-      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/companies/${encodeURIComponent(companyId)}/associations/2-53973802`;
-      const assocRes = await hubspotFetch(assocUrl);
-
-      if (assocRes.status === 404) {
-        throw new NotFoundError(
-          'COMPANY_NOT_FOUND',
-          `Company ${companyId} no existe en HubSpot`,
-          { companyId }
-        );
-      }
-      if (!assocRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${assocRes.status} al leer asociaciones a direcciones`,
-          { companyId, status: assocRes.status }
-        );
-      }
-
-      const assocBody = (await assocRes.json()) as {
-        results?: Array<{ toObjectId?: string | number }>;
-      };
-      const ids = (assocBody.results ?? [])
-        .map((r) => r.toObjectId)
-        .filter((id): id is string | number => id !== undefined && id !== null)
-        .map((id) => String(id));
-
+      const ids = await fetchAssociationIds(
+        'companies',
+        companyId,
+        '2-53973802',
+        'COMPANY_NOT_FOUND'
+      );
       if (ids.length === 0) return [];
 
-      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/2-53973802/batch/read`;
-      const batchRes = await hubspotFetch(batchUrl, {
-        method: 'POST',
-        body: JSON.stringify({
-          inputs: ids.map((id) => ({ id })),
-          properties: ['direction', 'hs_createdate'],
-        }),
-      });
+      const results = await batchReadObjects(
+        '2-53973802',
+        ids,
+        ['direction', 'hs_createdate'],
+        { companyId }
+      );
 
-      if (!batchRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${batchRes.status} al batch-read de direcciones`,
-          { companyId, status: batchRes.status }
-        );
-      }
-
-      const batchBody = (await batchRes.json()) as {
-        results?: Array<{
-          id?: string;
-          properties?: { direction?: string; hs_createdate?: string };
-        }>;
-      };
-
-      return (batchBody.results ?? [])
+      return results
         .map((r) => ({
           id: r.id ?? '',
           direction: r.properties?.direction?.trim() ?? '',
@@ -546,31 +487,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     },
 
     async getDealLatestQuote(dealId: string): Promise<Quote> {
-      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/quotes`;
-      const assocRes = await hubspotFetch(assocUrl);
-
-      if (assocRes.status === 404) {
-        throw new NotFoundError(
-          'DEAL_NOT_FOUND',
-          `Deal ${dealId} no existe en HubSpot`,
-          { dealId }
-        );
-      }
-      if (!assocRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${assocRes.status} al leer asociaciones a quotes`,
-          { dealId, status: assocRes.status }
-        );
-      }
-
-      const assocBody = (await assocRes.json()) as {
-        results?: Array<{ toObjectId?: string | number }>;
-      };
-      const ids = (assocBody.results ?? [])
-        .map((r) => r.toObjectId)
-        .filter((id): id is string | number => id !== undefined && id !== null)
-        .map((id) => String(id));
+      const ids = await fetchAssociationIds('deals', dealId, 'quotes', 'DEAL_NOT_FOUND');
 
       if (ids.length === 0) {
         throw new ValidationError(
@@ -580,39 +497,25 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         );
       }
 
-      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/quotes/batch/read`;
-      const batchRes = await hubspotFetch(batchUrl, {
-        method: 'POST',
-        body: JSON.stringify({
-          inputs: ids.map((id) => ({ id })),
-          properties: ['hs_quote_link', 'hs_createdate'],
-        }),
-      });
+      const results = await batchReadObjects(
+        'quotes',
+        ids,
+        ['hs_quote_link', 'hs_createdate'],
+        { dealId }
+      );
 
-      if (!batchRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${batchRes.status} al batch-read de quotes`,
-          { dealId, status: batchRes.status }
-        );
-      }
-
-      const batchBody = (await batchRes.json()) as {
-        results?: Array<{
-          id?: string;
-          properties?: { hs_quote_link?: string; hs_createdate?: string };
-        }>;
-      };
-
-      const sorted = (batchBody.results ?? [])
+      const latest = results
         .map((r) => ({
           id: r.id ?? '',
           hsQuoteLink: r.properties?.hs_quote_link?.trim() ?? '',
           hsCreatedate: r.properties?.hs_createdate ?? '',
         }))
-        .sort((a, b) => b.hsCreatedate.localeCompare(a.hsCreatedate));
+        .reduce<{ id: string; hsQuoteLink: string; hsCreatedate: string } | null>(
+          (best, q) =>
+            best === null || q.hsCreatedate.localeCompare(best.hsCreatedate) > 0 ? q : best,
+          null
+        );
 
-      const latest = sorted[0];
       if (!latest) {
         throw new ValidationError(
           'QUOTE_NOT_FOUND',

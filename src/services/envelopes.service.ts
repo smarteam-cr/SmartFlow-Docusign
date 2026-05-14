@@ -3,6 +3,7 @@ import {
   ValidationError,
 } from '../lib/errors/index.js';
 import type {
+  Contact,
   Direccion,
   HubSpotAdapter,
 } from '../integrations/HS/index.js';
@@ -35,6 +36,31 @@ export interface EnvelopesServiceDeps {
   docusign: DocusignAdapter;
   templateMapping: TemplateMappingResolver;
   templateRoles: TemplateRolesResolver;
+}
+
+async function resolveCliente(
+  hubspot: HubSpotAdapter,
+  chosen: Contact,
+  dealId: string
+): Promise<Contact> {
+  const juridicoIds = await hubspot.findJuridicoContactIds(dealId);
+  if (juridicoIds.length > 1) {
+    throw new ValidationError(
+      'CLIENTE_MULTIPLE_JURIDICO',
+      `El Deal ${dealId} tiene ${juridicoIds.length} contactos con label responsable_jurídico; sólo se admite uno`,
+      { dealId, juridicoIds }
+    );
+  }
+  const clienteId = juridicoIds[0] ?? chosen.id;
+  const cliente = clienteId === chosen.id ? chosen : await hubspot.getContactById(clienteId);
+  if (!cliente.email) {
+    throw new ValidationError(
+      'CLIENTE_EMAIL_MISSING',
+      `El contacto cliente ${cliente.id} no tiene email — DocuSign lo necesita para enviar`,
+      { dealId, contactId: cliente.id }
+    );
+  }
+  return cliente;
 }
 
 function selectDireccion(
@@ -119,26 +145,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      const juridicoIds = await deps.hubspot.findJuridicoContactIds(input.dealId);
-      if (juridicoIds.length > 1) {
-        throw new ValidationError(
-          'CLIENTE_MULTIPLE_JURIDICO',
-          `El Deal ${input.dealId} tiene ${juridicoIds.length} contactos con label responsable_jurídico; sólo se admite uno`,
-          { dealId: input.dealId, juridicoIds }
-        );
-      }
-      const clienteId = juridicoIds[0] ?? input.contactId;
-      const cliente =
-        clienteId === input.contactId
-          ? chosen
-          : await deps.hubspot.getContactById(clienteId);
-      if (!cliente.email) {
-        throw new ValidationError(
-          'CLIENTE_EMAIL_MISSING',
-          `El contacto cliente ${cliente.id} no tiene email — DocuSign lo necesita para enviar`,
-          { dealId: input.dealId, contactId: cliente.id }
-        );
-      }
+      const cliente = await resolveCliente(deps.hubspot, chosen, input.dealId);
 
       const [company, capex, quote] = await Promise.all([
         deps.hubspot.getDealPrimaryCompany(input.dealId),

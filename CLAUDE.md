@@ -99,10 +99,13 @@ Si un cambio te hace dudar de esta regla, **abre el spec en §4.2 y verifica ant
 export function createHubSpotAdapter(config: { accessToken: string }) {
   return {
     async getDealContacts(dealId: string): Promise<Contact[]> { /* v4 assoc + v3 batch-read */ },
-    async getContactDetails(contactId: string): Promise<ContactDetails> { /* v3 single read, PII fields */ },
-    async getDeal(dealId: string): Promise<DealSummary> { /* currencyCode */ },
+    async getContactById(contactId: string): Promise<Contact> { /* v3 single read */ },
     async getDealPrimaryCompany(dealId: string): Promise<Company> { /* v4 assoc filtered by Primary label */ },
-    async getDealLineItem(dealId: string): Promise<LineItem> { /* throws if 0 or >1, or if archived */ },
+    async getDealOwner(dealId: string): Promise<DealOwner> { /* deal.hubspot_owner_id + /crm/v3/owners/{id} */ },
+    async findJuridicoContactIds(dealId: string): Promise<string[]> { /* v4 assoc filtered by USER_DEFINED label */ },
+    async getDealCapex(dealId: string): Promise<Capex[]> { /* v4 assoc + batch-read; throws if >6 */ },
+    async getCompanyDirecciones(companyId: string): Promise<Direccion[]> { /* v4 assoc + batch-read */ },
+    async getDealLatestQuote(dealId: string): Promise<Quote> { /* v4 assoc + batch-read; latest by hs_createdate */ },
   };
 }
 ```
@@ -115,9 +118,10 @@ export function createEnvelopesService(deps: {
   hubspot: HubSpotAdapter;
   docusign: DocusignAdapter;
   templateMapping: TemplateMappingResolver;
+  templateRoles: TemplateRolesResolver;
 }) {
   return {
-    async sendFromTemplate(input: { dealId: string; templateId: string; contactId: string }) { /* ... */ }
+    async sendFromTemplate(input: { dealId: string; templateId: string; contactId: string; directionId?: string }) { /* ... */ }
   };
 }
 ```
