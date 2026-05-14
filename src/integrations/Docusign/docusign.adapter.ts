@@ -12,16 +12,17 @@ export interface TemplateSummary {
   name: string;
 }
 
-export interface EnvelopeSigner {
+export interface TemplateRole {
+  roleName: string;
   name: string;
   email: string;
-  roleName: string;
+  routingOrder: number;
+  tabs?: Record<string, string>;
 }
 
 export interface SendEnvelopeInput {
   templateId: string;
-  signer: EnvelopeSigner;
-  prefillTabs: Record<string, string>;
+  roles: TemplateRole[];
 }
 
 export interface SendEnvelopeResult {
@@ -170,21 +171,24 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
     async sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult> {
       const url = `${accountUrl}/envelopes`;
 
-      const textTabs = Object.entries(input.prefillTabs).map(([tabLabel, value]) => ({
-        tabLabel,
-        value,
-      }));
-
       const requestBody = {
         templateId: input.templateId,
-        templateRoles: [
-          {
-            roleName: input.signer.roleName,
-            name: input.signer.name,
-            email: input.signer.email,
-            tabs: { textTabs },
-          },
-        ],
+        templateRoles: input.roles.map((r) => ({
+          roleName: r.roleName,
+          name: r.name,
+          email: r.email,
+          routingOrder: r.routingOrder,
+          ...(r.tabs
+            ? {
+                tabs: {
+                  textTabs: Object.entries(r.tabs).map(([tabLabel, value]) => ({
+                    tabLabel,
+                    value,
+                  })),
+                },
+              }
+            : {}),
+        })),
         status: 'sent',
       };
 

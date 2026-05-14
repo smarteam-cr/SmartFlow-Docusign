@@ -2,7 +2,7 @@ export type {
   DocusignAdapter,
   DocusignAdapterConfig,
   TemplateSummary,
-  EnvelopeSigner,
+  TemplateRole,
   SendEnvelopeInput,
   SendEnvelopeResult,
 } from './docusign.adapter.js';
