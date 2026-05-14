@@ -5,6 +5,7 @@ import {
 import type { HubSpotAdapter } from '../integrations/HS/index.js';
 import type { DocusignAdapter } from '../integrations/Docusign/index.js';
 import type { TemplateMappingResolver } from '../lib/template-mapping/index.js';
+import type { TemplateRolesResolver } from '../lib/template-roles/index.js';
 
 export interface SendFromTemplateInput {
   dealId: string;
@@ -26,6 +27,7 @@ export interface EnvelopesServiceDeps {
   hubspot: HubSpotAdapter;
   docusign: DocusignAdapter;
   templateMapping: TemplateMappingResolver;
+  templateRoles: TemplateRolesResolver;
 }
 
 export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesService {
@@ -41,7 +43,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 2) Find the chosen contact in the list; reject if not found.
+      // 2) Find the chosen contact (Cliente) in the list; reject if not found.
       const chosen = contacts.find((c) => c.id === input.contactId);
       if (!chosen) {
         throw new ValidationError(
@@ -51,7 +53,6 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 3) Defensive: the adapter filters out empty emails, but re-check.
       if (!chosen.email) {
         throw new ValidationError(
           'CONTACT_EMAIL_MISSING',
@@ -60,16 +61,38 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      // 4) Fetch all the extended data + DocuSign role in parallel.
-      const [contactDetails, deal, company, lineItem, roleName] = await Promise.all([
+      // 3) Resolve Propietario (deal owner). Adapter throws DEAL_OWNER_MISSING /
+      // OWNER_EMAIL_MISSING if the structural data is incomplete.
+      const owner = await deps.hubspot.getDealOwner(input.dealId);
+
+      // 4) Resolve Proveedor configured for this template.
+      const proveedorContactId = deps.templateRoles.getProveedorContactId(input.templateId);
+      if (!proveedorContactId) {
+        throw new ValidationError(
+          'PROVEEDOR_NOT_CONFIGURED',
+          `No hay proveedor configurado para el template ${input.templateId} (revisa TEMPLATE_PROVEEDOR_MAP)`,
+          { templateId: input.templateId }
+        );
+      }
+
+      const proveedor = await deps.hubspot.getContactById(proveedorContactId);
+      if (!proveedor.email) {
+        throw new ValidationError(
+          'PROVEEDOR_EMAIL_MISSING',
+          `El contacto proveedor ${proveedor.id} no tiene email — DocuSign lo necesita para enviar`,
+          { templateId: input.templateId, contactId: proveedor.id }
+        );
+      }
+
+      // 5) Fetch extended data in parallel (used to build the tabs).
+      const [contactDetails, deal, company, lineItem] = await Promise.all([
         deps.hubspot.getContactDetails(input.contactId),
         deps.hubspot.getDeal(input.dealId),
         deps.hubspot.getDealPrimaryCompany(input.dealId),
         deps.hubspot.getDealLineItem(input.dealId),
-        deps.docusign.getFirstRoleName(input.templateId),
       ]);
 
-      // 5) Build the mapping context and resolve the 11 tabs.
+      // 6) Build mapping context and resolve the 11 tabs (carried by Propietario).
       const tabs = await deps.templateMapping.resolveTabValues({
         templateId: input.templateId,
         contact: {
@@ -94,21 +117,39 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         dealCurrencyCode: deal.currencyCode,
       });
 
-      // 6) Send envelope.
+      const proveedorName = `${proveedor.firstName} ${proveedor.lastName}`.trim();
+      const clienteName = `${chosen.firstName} ${chosen.lastName}`.trim();
+
+      // 7) Send envelope with the 3 sequential signers.
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
-        signer: {
-          name: `${chosen.firstName} ${chosen.lastName}`.trim(),
-          email: chosen.email,
-          roleName,
-        },
-        prefillTabs: tabs,
+        roles: [
+          {
+            roleName: 'Propietario',
+            name: owner.name,
+            email: owner.email,
+            routingOrder: 1,
+            tabs,
+          },
+          {
+            roleName: 'Proveedor',
+            name: proveedorName,
+            email: proveedor.email,
+            routingOrder: 2,
+          },
+          {
+            roleName: 'Cliente',
+            name: clienteName,
+            email: chosen.email,
+            routingOrder: 3,
+          },
+        ],
       });
 
       return {
         envelopeId,
         status,
-        recipientEmail: chosen.email,
+        recipientEmail: proveedor.email,
       };
     },
   };

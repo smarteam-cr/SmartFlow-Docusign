@@ -14,6 +14,7 @@ import type {
   LineItem,
 } from '../../integrations/HS/index.js';
 import type { TemplateMappingResolver } from '../../lib/template-mapping/index.js';
+import type { TemplateRolesResolver } from '../../lib/template-roles/index.js';
 import {
   NotFoundError,
   ValidationError,
@@ -139,13 +140,30 @@ function makeFakeMapping(
   };
 }
 
+function makeFakeTemplateRoles(
+  overrides: Partial<TemplateRolesResolver> = {}
+): TemplateRolesResolver {
+  return {
+    getProveedorContactId: jest
+      .fn<TemplateRolesResolver['getProveedorContactId']>()
+      .mockReturnValue('c-proveedor'),
+    ...overrides,
+  };
+}
+
 describe('envelopes.service', () => {
-  test('happy path: composes hubspot + docusign + mapping with 11 tabs', async () => {
+  test('happy path: 3 firmantes Propietario→Proveedor→Cliente con tabs en Propietario', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
+    const templateRoles = makeFakeTemplateRoles();
 
-    const service = createEnvelopesService({ hubspot, docusign, templateMapping });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping,
+      templateRoles,
+    });
 
     const result = await service.sendFromTemplate({
       dealId: '12345',
@@ -156,15 +174,17 @@ describe('envelopes.service', () => {
     expect(result).toEqual({
       envelopeId: 'env-123',
       status: 'sent',
-      recipientEmail: 'ada@math.org',
+      recipientEmail: 'maria@proveedor.co',
     });
 
     expect(hubspot.getDealContacts).toHaveBeenCalledWith('12345');
+    expect(hubspot.getDealOwner).toHaveBeenCalledWith('12345');
+    expect(hubspot.getContactById).toHaveBeenCalledWith('c-proveedor');
     expect(hubspot.getContactDetails).toHaveBeenCalledWith('c-ada');
     expect(hubspot.getDeal).toHaveBeenCalledWith('12345');
     expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledWith('12345');
     expect(hubspot.getDealLineItem).toHaveBeenCalledWith('12345');
-    expect(docusign.getFirstRoleName).toHaveBeenCalledWith('tpl-abc');
+    expect(templateRoles.getProveedorContactId).toHaveBeenCalledWith('tpl-abc');
 
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
@@ -177,12 +197,27 @@ describe('envelopes.service', () => {
 
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
-      signer: {
-        name: 'Ada Lovelace',
-        email: 'ada@math.org',
-        roleName: 'Signer 1',
-      },
-      prefillTabs: fullTabs,
+      roles: [
+        {
+          roleName: 'Propietario',
+          name: 'Carlos Owner',
+          email: 'carlos@empresa.co',
+          routingOrder: 1,
+          tabs: fullTabs,
+        },
+        {
+          roleName: 'Proveedor',
+          name: 'María Gómez',
+          email: 'maria@proveedor.co',
+          routingOrder: 2,
+        },
+        {
+          roleName: 'Cliente',
+          name: 'Ada Lovelace',
+          email: 'ada@math.org',
+          routingOrder: 3,
+        },
+      ],
     });
   });
 
@@ -196,6 +231,7 @@ describe('envelopes.service', () => {
       hubspot,
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
@@ -212,6 +248,7 @@ describe('envelopes.service', () => {
       hubspot: makeFakeHubspot(),
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
@@ -233,28 +270,12 @@ describe('envelopes.service', () => {
       hubspot,
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
       service.sendFromTemplate({ dealId: '99', templateId: 'tpl', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'DEAL_NOT_FOUND', httpStatus: 404 });
-  });
-
-  test('propagates TEMPLATE_NOT_FOUND from docusign.getFirstRoleName', async () => {
-    const docusign = makeFakeDocusign({
-      getFirstRoleName: jest
-        .fn<(templateId: string) => Promise<string>>()
-        .mockRejectedValue(new NotFoundError('TEMPLATE_NOT_FOUND', 'no existe', undefined)),
-    });
-    const service = createEnvelopesService({
-      hubspot: makeFakeHubspot(),
-      docusign,
-      templateMapping: makeFakeMapping(),
-    });
-
-    await expect(
-      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl-bad', contactId: 'c-ada' })
-    ).rejects.toMatchObject({ code: 'TEMPLATE_NOT_FOUND', httpStatus: 404 });
   });
 
   test('propagates DOCUSIGN_UNAVAILABLE from sendEnvelopeFromTemplate', async () => {
@@ -269,6 +290,7 @@ describe('envelopes.service', () => {
       hubspot: makeFakeHubspot(),
       docusign,
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
@@ -287,14 +309,13 @@ describe('envelopes.service', () => {
       hubspot,
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ghost' })
     ).rejects.toMatchObject({ code: 'CONTACT_EMAIL_MISSING', httpStatus: 422 });
   });
-
-  // ─── New tests for Plan 6 ─────────────────────────────────────────────
 
   test('propagates DEAL_LINE_ITEMS_INVALID when adapter throws (0 line items)', async () => {
     const hubspot = makeFakeHubspot({
@@ -309,6 +330,7 @@ describe('envelopes.service', () => {
       hubspot,
       docusign,
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
@@ -331,6 +353,7 @@ describe('envelopes.service', () => {
       hubspot,
       docusign,
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await expect(
@@ -356,6 +379,7 @@ describe('envelopes.service', () => {
       hubspot: makeFakeHubspot(),
       docusign,
       templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     const result = await service.sendFromTemplate({
@@ -364,29 +388,33 @@ describe('envelopes.service', () => {
       contactId: 'c-ada',
     });
 
-    // Envío exitoso, no se lanza ningún error de field-level
     expect(result.envelopeId).toBeDefined();
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
 
-    // Los tabs vacíos llegan al adapter tal cual (no se filtran)
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledWith(
       expect.objectContaining({
-        prefillTabs: expect.objectContaining({
-          NumeroIdentificacionComodatario: '',
-          DireccionEmpresaComodatario: '',
-          SkuProducto: '   ',
-        }),
+        roles: expect.arrayContaining([
+          expect.objectContaining({
+            roleName: 'Propietario',
+            tabs: expect.objectContaining({
+              NumeroIdentificacionComodatario: '',
+              DireccionEmpresaComodatario: '',
+              SkuProducto: '   ',
+            }),
+          }),
+        ]),
       })
     );
   });
 
-  test('happy path actually consults all 5 parallel fetches before sending', async () => {
+  test('happy path consulta las 4 fetches paralelas y las 2 fetches previas (owner + proveedor)', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
       hubspot,
       docusign,
       templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
     });
 
     await service.sendFromTemplate({
@@ -395,11 +423,105 @@ describe('envelopes.service', () => {
       contactId: 'c-ada',
     });
 
+    expect(hubspot.getDealOwner).toHaveBeenCalledTimes(1);
+    expect(hubspot.getContactById).toHaveBeenCalledTimes(1);
     expect(hubspot.getContactDetails).toHaveBeenCalledTimes(1);
     expect(hubspot.getDeal).toHaveBeenCalledTimes(1);
     expect(hubspot.getDealPrimaryCompany).toHaveBeenCalledTimes(1);
     expect(hubspot.getDealLineItem).toHaveBeenCalledTimes(1);
-    expect(docusign.getFirstRoleName).toHaveBeenCalledTimes(1);
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  // ─── New tests for Plan 8 / F2 ─────────────────────────────────────────
+
+  test('lanza DEAL_OWNER_MISSING cuando el deal no tiene propietario', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealOwner: jest
+        .fn<HubSpotAdapter['getDealOwner']>()
+        .mockRejectedValue(new ValidationError('DEAL_OWNER_MISSING', '...', undefined)),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'DEAL_OWNER_MISSING', httpStatus: 422 });
+  });
+
+  test('lanza OWNER_EMAIL_MISSING cuando el owner no tiene email', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealOwner: jest
+        .fn<HubSpotAdapter['getDealOwner']>()
+        .mockRejectedValue(new ValidationError('OWNER_EMAIL_MISSING', '...', undefined)),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'OWNER_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  test('lanza PROVEEDOR_NOT_CONFIGURED cuando el templateId no está en el mapa', async () => {
+    const templateRoles = makeFakeTemplateRoles({
+      getProveedorContactId: jest
+        .fn<TemplateRolesResolver['getProveedorContactId']>()
+        .mockReturnValue(undefined),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles,
+    });
+    await expect(
+      service.sendFromTemplate({
+        dealId: '12345',
+        templateId: 'tpl-sin-config',
+        contactId: 'c-ada',
+      })
+    ).rejects.toMatchObject({ code: 'PROVEEDOR_NOT_CONFIGURED', httpStatus: 422 });
+  });
+
+  test('lanza PROVEEDOR_CONTACT_NOT_FOUND cuando el contacto proveedor no existe en HubSpot', async () => {
+    const hubspot = makeFakeHubspot({
+      getContactById: jest
+        .fn<HubSpotAdapter['getContactById']>()
+        .mockRejectedValue(
+          new ValidationError('PROVEEDOR_CONTACT_NOT_FOUND', '...', undefined)
+        ),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'PROVEEDOR_CONTACT_NOT_FOUND', httpStatus: 422 });
+  });
+
+  test('lanza PROVEEDOR_EMAIL_MISSING cuando el proveedor no tiene email', async () => {
+    const hubspot = makeFakeHubspot({
+      getContactById: jest
+        .fn<HubSpotAdapter['getContactById']>()
+        .mockResolvedValue({ id: 'c-prov', firstName: 'María', lastName: 'G', email: '' }),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'PROVEEDOR_EMAIL_MISSING', httpStatus: 422 });
   });
 });
