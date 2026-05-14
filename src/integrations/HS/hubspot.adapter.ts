@@ -45,6 +45,15 @@ export interface DealOwner {
   email: string;
 }
 
+export interface Capex {
+  id: string;
+  qrCapex: string;
+  nombre: string;
+  cantidad: string;
+  costoNeto: string;
+  hsCreatedate: string;
+}
+
 export interface HubSpotAdapter {
   /**
    * Returns all contacts associated to a Deal that have a non-empty email.
@@ -124,6 +133,16 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   findJuridicoContactIds(dealId: string): Promise<string[]>;
+
+  /**
+   * Returns capex (custom object 2-58142466) associated to a Deal, ordered by
+   * `hs_createdate` ascending. Tolerates missing field values (empty strings).
+   *
+   * @throws ValidationError(CAPEX_TOO_MANY) when there are more than 6 capex
+   * @throws NotFoundError(DEAL_NOT_FOUND) on 404
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getDealCapex(dealId: string): Promise<Capex[]>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -535,6 +554,84 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         email: body.properties?.email?.trim() ?? '',
         docIdentificacion: body.properties?.doc_identificacion?.trim() ?? '',
       };
+    },
+
+    async getDealCapex(dealId: string): Promise<Capex[]> {
+      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/2-58142466`;
+      const assocRes = await hubspotFetch(assocUrl);
+
+      if (assocRes.status === 404) {
+        throw new NotFoundError(
+          'DEAL_NOT_FOUND',
+          `Deal ${dealId} no existe en HubSpot`,
+          { dealId }
+        );
+      }
+      if (!assocRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${assocRes.status} al leer asociaciones a capex`,
+          { dealId, status: assocRes.status }
+        );
+      }
+
+      const assocBody = (await assocRes.json()) as {
+        results?: Array<{ toObjectId?: string | number }>;
+      };
+      const ids = (assocBody.results ?? [])
+        .map((r) => r.toObjectId)
+        .filter((id): id is string | number => id !== undefined && id !== null)
+        .map((id) => String(id));
+
+      if (ids.length > 6) {
+        throw new ValidationError(
+          'CAPEX_TOO_MANY',
+          `El Deal ${dealId} tiene ${ids.length} capex asociados; el máximo permitido es 6`,
+          { dealId, count: ids.length }
+        );
+      }
+      if (ids.length === 0) return [];
+
+      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/2-58142466/batch/read`;
+      const batchRes = await hubspotFetch(batchUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          inputs: ids.map((id) => ({ id })),
+          properties: ['qr_capex', 'nombre', 'cantidad', 'costo_neto', 'hs_createdate'],
+        }),
+      });
+
+      if (!batchRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${batchRes.status} al batch-read de capex`,
+          { dealId, status: batchRes.status }
+        );
+      }
+
+      const batchBody = (await batchRes.json()) as {
+        results?: Array<{
+          id?: string;
+          properties?: {
+            qr_capex?: string;
+            nombre?: string;
+            cantidad?: string;
+            costo_neto?: string;
+            hs_createdate?: string;
+          };
+        }>;
+      };
+
+      return (batchBody.results ?? [])
+        .map((r) => ({
+          id: r.id ?? '',
+          qrCapex: r.properties?.qr_capex?.trim() ?? '',
+          nombre: r.properties?.nombre?.trim() ?? '',
+          cantidad: r.properties?.cantidad?.trim() ?? '',
+          costoNeto: r.properties?.costo_neto?.trim() ?? '',
+          hsCreatedate: r.properties?.hs_createdate ?? '',
+        }))
+        .sort((a, b) => a.hsCreatedate.localeCompare(b.hsCreatedate));
     },
 
     async findJuridicoContactIds(dealId: string): Promise<string[]> {

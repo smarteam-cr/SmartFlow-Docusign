@@ -227,6 +227,68 @@ describe('HubSpotAdapter.findJuridicoContactIds', () => {
   });
 });
 
+describe('HubSpotAdapter.getDealCapex', () => {
+  test('retorna array vacío si el deal no tiene capex', async () => {
+    mockFetchSequence([{ status: 200, body: { results: [] } }]);
+    const capex = await adapter.getDealCapex('d-1');
+    expect(capex).toEqual([]);
+  });
+
+  test('retorna capex ordenados por hs_createdate ascendente', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'cx-2' }, { toObjectId: 'cx-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [
+            { id: 'cx-2', properties: { qr_capex: 'Q2', nombre: 'B', cantidad: '2', costo_neto: '200', hs_createdate: '2026-02-02' } },
+            { id: 'cx-1', properties: { qr_capex: 'Q1', nombre: 'A', cantidad: '1', costo_neto: '100', hs_createdate: '2026-01-01' } },
+          ],
+        },
+      },
+    ]);
+    const capex = await adapter.getDealCapex('d-1');
+    expect(capex.map((c) => c.id)).toEqual(['cx-1', 'cx-2']);
+  });
+
+  test('lanza CAPEX_TOO_MANY cuando hay más de 6', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: { results: Array.from({ length: 7 }, (_, i) => ({ toObjectId: `cx-${i}` })) },
+    }]);
+    await expect(adapter.getDealCapex('d-1')).rejects.toMatchObject({
+      code: 'CAPEX_TOO_MANY',
+      httpStatus: 422,
+    });
+  });
+
+  test('tolera propiedades vacías (qr_capex sin valor)', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'cx-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [{
+            id: 'cx-1',
+            properties: { nombre: 'A', cantidad: '1', costo_neto: '100', hs_createdate: '2026-01-01' },
+          }],
+        },
+      },
+    ]);
+    const capex = await adapter.getDealCapex('d-1');
+    expect(capex[0]?.qrCapex).toBe('');
+    expect(capex[0]?.nombre).toBe('A');
+  });
+
+  test('lanza DEAL_NOT_FOUND con 404', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+    await expect(adapter.getDealCapex('d-ghost')).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([
