@@ -1,8 +1,4 @@
-import {
-  NotFoundError,
-  ValidationError,
-  ExternalServiceError,
-} from '../../lib/errors/index.js';
+import { ExternalServiceError } from '../../lib/errors/index.js';
 import { createJwtAuthClient, type JwtAuthClient } from './docusign.auth.js';
 
 const DOCUSIGN_TIMEOUT_MS = 15_000;
@@ -36,14 +32,6 @@ export interface DocusignAdapter {
    * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
    */
   listTemplates(): Promise<TemplateSummary[]>;
-
-  /**
-   * Returns the first signer roleName defined on the template.
-   * @throws NotFoundError(TEMPLATE_NOT_FOUND)
-   * @throws ValidationError(TEMPLATE_HAS_NO_ROLES)
-   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
-   */
-  getFirstRoleName(templateId: string): Promise<string>;
 
   /**
    * Creates and sends an envelope from a template.
@@ -131,41 +119,6 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
       return (body.envelopeTemplates ?? [])
         .filter((t) => t.templateId && t.name)
         .map((t) => ({ id: t.templateId!, name: t.name! }));
-    },
-
-    async getFirstRoleName(templateId: string): Promise<string> {
-      const url = `${accountUrl}/templates/${encodeURIComponent(templateId)}`;
-      const res = await docusignFetch(url, { method: 'GET' });
-
-      if (res.status === 404) {
-        throw new NotFoundError(
-          'TEMPLATE_NOT_FOUND',
-          `Template ${templateId} no existe en DocuSign`,
-          { templateId }
-        );
-      }
-      if (!res.ok) {
-        throw new ExternalServiceError(
-          'DOCUSIGN_UNAVAILABLE',
-          `DocuSign respondió ${res.status} al leer el template`,
-          { templateId, status: res.status }
-        );
-      }
-
-      const body = (await res.json()) as {
-        recipients?: { signers?: Array<{ roleName?: string }> };
-      };
-
-      const firstRoleName = body.recipients?.signers?.[0]?.roleName;
-      if (!firstRoleName) {
-        throw new ValidationError(
-          'TEMPLATE_HAS_NO_ROLES',
-          `Template ${templateId} no tiene roles de firmante definidos`,
-          { templateId }
-        );
-      }
-
-      return firstRoleName;
     },
 
     async sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult> {

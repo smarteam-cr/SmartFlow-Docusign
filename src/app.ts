@@ -8,6 +8,7 @@ import {
 import type { Env } from './config/env.js';
 import { createEnvTenantConfigProvider } from './lib/tenant-config/index.js';
 import { createStaticTemplateMappingResolver } from './lib/template-mapping/index.js';
+import { createStaticTemplateRolesResolver } from './lib/template-roles/index.js';
 import { createHubSpotAdapter } from './integrations/HS/index.js';
 import { createDocusignAdapter } from './integrations/Docusign/index.js';
 import {
@@ -82,12 +83,14 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   const hubspot = createHubSpotAdapter(tenantConfig.hubspot);
   const docusign = createDocusignAdapter(tenantConfig.docusign);
   const templateMapping = createStaticTemplateMappingResolver();
+  const templateRoles = createStaticTemplateRolesResolver(env.TEMPLATE_PROVEEDOR_MAP);
 
   const templatesService = createTemplatesService({ docusign });
   const envelopesService = createEnvelopesService({
     hubspot,
     docusign,
     templateMapping,
+    templateRoles,
   });
 
   const templatesController = createTemplatesController(templatesService);

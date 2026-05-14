@@ -9,9 +9,6 @@ import { ExternalServiceError } from '../../lib/errors/index.js';
 function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAdapter {
   return {
     listTemplates: jest.fn<() => Promise<TemplateSummary[]>>().mockResolvedValue([]),
-    getFirstRoleName: jest
-      .fn<(templateId: string) => Promise<string>>()
-      .mockResolvedValue('Signer 1'),
     sendEnvelopeFromTemplate: jest
       .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
       .mockResolvedValue({ envelopeId: 'env-1', status: 'sent' }),

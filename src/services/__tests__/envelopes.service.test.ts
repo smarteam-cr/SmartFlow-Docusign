@@ -105,9 +105,6 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
     listTemplates: jest
       .fn<() => Promise<TemplateSummary[]>>()
       .mockResolvedValue([]),
-    getFirstRoleName: jest
-      .fn<(templateId: string) => Promise<string>>()
-      .mockResolvedValue('Signer 1'),
     sendEnvelopeFromTemplate: jest
       .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
       .mockResolvedValue({ envelopeId: 'env-123', status: 'sent' }),
