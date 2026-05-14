@@ -39,6 +39,12 @@ export interface LineItem {
   price: string;
 }
 
+export interface DealOwner {
+  id: string;
+  name: string;
+  email: string;
+}
+
 export interface HubSpotAdapter {
   /**
    * Returns all contacts associated to a Deal that have a non-empty email.
@@ -88,6 +94,16 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getDealLineItem(dealId: string): Promise<LineItem>;
+
+  /**
+   * Returns the HubSpot Owner assigned to the Deal (Propietario in v2 routing).
+   *
+   * @throws NotFoundError(DEAL_NOT_FOUND) if dealId doesn't exist
+   * @throws ValidationError(DEAL_OWNER_MISSING) if the Deal has no hubspot_owner_id
+   * @throws ValidationError(OWNER_EMAIL_MISSING) if the owner has no email
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getDealOwner(dealId: string): Promise<DealOwner>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -386,6 +402,67 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         sku: liBody.properties?.hs_sku?.trim() ?? '',
         price: liBody.properties?.price?.trim() ?? '',
       };
+    },
+
+    async getDealOwner(dealId: string): Promise<DealOwner> {
+      const dealUrl =
+        `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}` +
+        `?properties=hubspot_owner_id`;
+      const dealRes = await hubspotFetch(dealUrl);
+
+      if (dealRes.status === 404) {
+        throw new NotFoundError('DEAL_NOT_FOUND', `Deal ${dealId} no existe en HubSpot`, { dealId });
+      }
+      if (!dealRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${dealRes.status} al leer owner del Deal`,
+          { dealId, status: dealRes.status }
+        );
+      }
+
+      const dealBody = (await dealRes.json()) as {
+        properties?: { hubspot_owner_id?: string | null };
+      };
+
+      const ownerId = dealBody.properties?.hubspot_owner_id?.trim();
+      if (!ownerId) {
+        throw new ValidationError(
+          'DEAL_OWNER_MISSING',
+          `El Deal ${dealId} no tiene propietario asignado en HubSpot`,
+          { dealId }
+        );
+      }
+
+      const ownerUrl = `${HUBSPOT_BASE_URL}/crm/v3/owners/${encodeURIComponent(ownerId)}`;
+      const ownerRes = await hubspotFetch(ownerUrl);
+
+      if (!ownerRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${ownerRes.status} al leer el owner ${ownerId}`,
+          { dealId, ownerId, status: ownerRes.status }
+        );
+      }
+
+      const ownerBody = (await ownerRes.json()) as {
+        id?: string | number;
+        firstName?: string;
+        lastName?: string;
+        email?: string;
+      };
+
+      const email = ownerBody.email?.trim() ?? '';
+      if (!email) {
+        throw new ValidationError(
+          'OWNER_EMAIL_MISSING',
+          `El propietario ${ownerId} del Deal ${dealId} no tiene email configurado`,
+          { dealId, ownerId }
+        );
+      }
+
+      const name = `${ownerBody.firstName ?? ''} ${ownerBody.lastName ?? ''}`.trim();
+      return { id: String(ownerId), name, email };
     },
   };
 }

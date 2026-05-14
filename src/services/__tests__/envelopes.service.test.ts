@@ -9,6 +9,7 @@ import type {
   ContactDetails,
   Company,
   DealSummary,
+  DealOwner,
   HubSpotAdapter,
   LineItem,
 } from '../../integrations/HS/index.js';
@@ -58,6 +59,12 @@ const fullLineItem: LineItem = {
   price: '1000',
 };
 
+const dealOwner: DealOwner = {
+  id: 'owner-55555',
+  name: 'Carlos Owner',
+  email: 'carlos@empresa.co',
+};
+
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
   return {
     getDealContacts: jest
@@ -75,6 +82,9 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     getDealLineItem: jest
       .fn<HubSpotAdapter['getDealLineItem']>()
       .mockResolvedValue(fullLineItem),
+    getDealOwner: jest
+      .fn<HubSpotAdapter['getDealOwner']>()
+      .mockResolvedValue(dealOwner),
     ...overrides,
   };
 }

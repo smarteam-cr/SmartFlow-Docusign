@@ -1,0 +1,56 @@
+import { describe, expect, jest, test, afterEach } from '@jest/globals';
+import { createHubSpotAdapter } from '../hubspot.adapter.js';
+
+const adapter = createHubSpotAdapter({ accessToken: 'test-token' });
+
+function mockFetchSequence(responses: Array<{ status: number; body: unknown }>) {
+  let call = 0;
+  jest.spyOn(global, 'fetch').mockImplementation(() => {
+    const r = responses[call++] ?? { status: 500, body: {} };
+    return Promise.resolve({
+      ok: r.status >= 200 && r.status < 300,
+      status: r.status,
+      json: () => Promise.resolve(r.body),
+      text: () => Promise.resolve(JSON.stringify(r.body)),
+    } as Response);
+  });
+}
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
+describe('HubSpotAdapter.getDealOwner', () => {
+  test('happy path: retorna owner con nombre y email', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { hubspot_owner_id: '55555' } } },
+      { status: 200, body: { id: 55555, firstName: 'Juan', lastName: 'Pérez', email: 'juan@acme.co' } },
+    ]);
+
+    const owner = await adapter.getDealOwner('d-1');
+    expect(owner).toEqual({ id: '55555', name: 'Juan Pérez', email: 'juan@acme.co' });
+  });
+
+  test('lanza DEAL_OWNER_MISSING cuando el deal no tiene hubspot_owner_id', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { hubspot_owner_id: null } } },
+    ]);
+
+    await expect(adapter.getDealOwner('d-1')).rejects.toMatchObject({
+      code: 'DEAL_OWNER_MISSING',
+      httpStatus: 422,
+    });
+  });
+
+  test('lanza OWNER_EMAIL_MISSING cuando el owner existe pero no tiene email', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { hubspot_owner_id: '55555' } } },
+      { status: 200, body: { id: 55555, firstName: 'Juan', lastName: 'Pérez', email: '' } },
+    ]);
+
+    await expect(adapter.getDealOwner('d-1')).rejects.toMatchObject({
+      code: 'OWNER_EMAIL_MISSING',
+      httpStatus: 422,
+    });
+  });
+});
