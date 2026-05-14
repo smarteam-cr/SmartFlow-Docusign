@@ -18,6 +18,7 @@ export const sendEnvelopeBodySchema = z.object({
     .min(1)
     .max(64)
     .regex(/^[0-9]+$/, 'contactId debe ser numérico'),
+  directionId: z.string().min(1).max(64).optional(),
 });
 
 export type SendEnvelopeBody = z.infer<typeof sendEnvelopeBodySchema>;
