@@ -328,6 +328,56 @@ describe('HubSpotAdapter.getCompanyDirecciones', () => {
   });
 });
 
+describe('HubSpotAdapter.getDealLatestQuote', () => {
+  test('retorna la quote más reciente por hs_createdate desc', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'q-1' }, { toObjectId: 'q-2' }] } },
+      {
+        status: 200,
+        body: {
+          results: [
+            { id: 'q-1', properties: { hs_quote_link: 'https://hubspot.com/q1', hs_createdate: '2026-01-01' } },
+            { id: 'q-2', properties: { hs_quote_link: 'https://hubspot.com/q2', hs_createdate: '2026-02-02' } },
+          ],
+        },
+      },
+    ]);
+    const q = await adapter.getDealLatestQuote('d-1');
+    expect(q.id).toBe('q-2');
+    expect(q.hsQuoteLink).toBe('https://hubspot.com/q2');
+  });
+
+  test('lanza QUOTE_NOT_FOUND cuando el deal no tiene quotes', async () => {
+    mockFetchSequence([{ status: 200, body: { results: [] } }]);
+    await expect(adapter.getDealLatestQuote('d-1')).rejects.toMatchObject({
+      code: 'QUOTE_NOT_FOUND',
+      httpStatus: 422,
+    });
+  });
+
+  test('tolera hs_quote_link vacío (no lanza)', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'q-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [{ id: 'q-1', properties: { hs_createdate: '2026-01-01' } }],
+        },
+      },
+    ]);
+    const q = await adapter.getDealLatestQuote('d-1');
+    expect(q.hsQuoteLink).toBe('');
+  });
+
+  test('lanza DEAL_NOT_FOUND con 404', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+    await expect(adapter.getDealLatestQuote('d-ghost')).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([

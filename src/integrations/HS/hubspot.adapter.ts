@@ -59,6 +59,11 @@ export interface Direccion {
   direction: string;
 }
 
+export interface Quote {
+  id: string;
+  hsQuoteLink: string;
+}
+
 export interface HubSpotAdapter {
   /**
    * Returns all contacts associated to a Deal that have a non-empty email.
@@ -157,6 +162,16 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getCompanyDirecciones(companyId: string): Promise<Direccion[]>;
+
+  /**
+   * Returns the most recent Quote (by hs_createdate desc) associated to a Deal.
+   * `hsQuoteLink` may be empty (tolerated — caller decides if it blocks).
+   *
+   * @throws ValidationError(QUOTE_NOT_FOUND) when the Deal has 0 quotes
+   * @throws NotFoundError(DEAL_NOT_FOUND) on 404
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getDealLatestQuote(dealId: string): Promise<Quote>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -709,6 +724,84 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         }))
         .sort((a, b) => a.hsCreatedate.localeCompare(b.hsCreatedate))
         .map(({ id, direction }) => ({ id, direction }));
+    },
+
+    async getDealLatestQuote(dealId: string): Promise<Quote> {
+      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/deals/${encodeURIComponent(dealId)}/associations/quotes`;
+      const assocRes = await hubspotFetch(assocUrl);
+
+      if (assocRes.status === 404) {
+        throw new NotFoundError(
+          'DEAL_NOT_FOUND',
+          `Deal ${dealId} no existe en HubSpot`,
+          { dealId }
+        );
+      }
+      if (!assocRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${assocRes.status} al leer asociaciones a quotes`,
+          { dealId, status: assocRes.status }
+        );
+      }
+
+      const assocBody = (await assocRes.json()) as {
+        results?: Array<{ toObjectId?: string | number }>;
+      };
+      const ids = (assocBody.results ?? [])
+        .map((r) => r.toObjectId)
+        .filter((id): id is string | number => id !== undefined && id !== null)
+        .map((id) => String(id));
+
+      if (ids.length === 0) {
+        throw new ValidationError(
+          'QUOTE_NOT_FOUND',
+          `El Deal ${dealId} no tiene cotizaciones asociadas. Crea una en HubSpot.`,
+          { dealId }
+        );
+      }
+
+      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/quotes/batch/read`;
+      const batchRes = await hubspotFetch(batchUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          inputs: ids.map((id) => ({ id })),
+          properties: ['hs_quote_link', 'hs_createdate'],
+        }),
+      });
+
+      if (!batchRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${batchRes.status} al batch-read de quotes`,
+          { dealId, status: batchRes.status }
+        );
+      }
+
+      const batchBody = (await batchRes.json()) as {
+        results?: Array<{
+          id?: string;
+          properties?: { hs_quote_link?: string; hs_createdate?: string };
+        }>;
+      };
+
+      const sorted = (batchBody.results ?? [])
+        .map((r) => ({
+          id: r.id ?? '',
+          hsQuoteLink: r.properties?.hs_quote_link?.trim() ?? '',
+          hsCreatedate: r.properties?.hs_createdate ?? '',
+        }))
+        .sort((a, b) => b.hsCreatedate.localeCompare(a.hsCreatedate));
+
+      const latest = sorted[0];
+      if (!latest) {
+        throw new ValidationError(
+          'QUOTE_NOT_FOUND',
+          `El Deal ${dealId} tenía quotes asociadas pero ninguna se pudo leer.`,
+          { dealId }
+        );
+      }
+      return { id: latest.id, hsQuoteLink: latest.hsQuoteLink };
     },
 
     async findJuridicoContactIds(dealId: string): Promise<string[]> {
