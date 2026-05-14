@@ -289,6 +289,45 @@ describe('HubSpotAdapter.getDealCapex', () => {
   });
 });
 
+describe('HubSpotAdapter.getCompanyDirecciones', () => {
+  test('retorna direcciones ordenadas por hs_createdate asc', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'dir-2' }, { toObjectId: 'dir-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [
+            { id: 'dir-2', properties: { direction: 'Calle B', hs_createdate: '2026-02-02' } },
+            { id: 'dir-1', properties: { direction: 'Calle A', hs_createdate: '2026-01-01' } },
+          ],
+        },
+      },
+    ]);
+    const dirs = await adapter.getCompanyDirecciones('co-1');
+    expect(dirs.map((d) => d.direction)).toEqual(['Calle A', 'Calle B']);
+    expect(dirs.map((d) => d.id)).toEqual(['dir-1', 'dir-2']);
+  });
+
+  test('retorna array vacío si la company no tiene direcciones', async () => {
+    mockFetchSequence([{ status: 200, body: { results: [] } }]);
+    expect(await adapter.getCompanyDirecciones('co-1')).toEqual([]);
+  });
+
+  test('tolera direction vacío', async () => {
+    mockFetchSequence([
+      { status: 200, body: { results: [{ toObjectId: 'dir-1' }] } },
+      {
+        status: 200,
+        body: {
+          results: [{ id: 'dir-1', properties: { hs_createdate: '2026-01-01' } }],
+        },
+      },
+    ]);
+    const dirs = await adapter.getCompanyDirecciones('co-1');
+    expect(dirs[0]?.direction).toBe('');
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([

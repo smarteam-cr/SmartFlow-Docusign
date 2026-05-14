@@ -54,6 +54,11 @@ export interface Capex {
   hsCreatedate: string;
 }
 
+export interface Direccion {
+  id: string;
+  direction: string;
+}
+
 export interface HubSpotAdapter {
   /**
    * Returns all contacts associated to a Deal that have a non-empty email.
@@ -143,6 +148,15 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getDealCapex(dealId: string): Promise<Capex[]>;
+
+  /**
+   * Returns direcciones (custom object 2-53973802) associated to a Company,
+   * ordered by `hs_createdate` ascending. No upper cap.
+   *
+   * @throws NotFoundError(COMPANY_NOT_FOUND) on 404
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getCompanyDirecciones(companyId: string): Promise<Direccion[]>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -632,6 +646,69 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
           hsCreatedate: r.properties?.hs_createdate ?? '',
         }))
         .sort((a, b) => a.hsCreatedate.localeCompare(b.hsCreatedate));
+    },
+
+    async getCompanyDirecciones(companyId: string): Promise<Direccion[]> {
+      const assocUrl = `${HUBSPOT_BASE_URL}/crm/v4/objects/companies/${encodeURIComponent(companyId)}/associations/2-53973802`;
+      const assocRes = await hubspotFetch(assocUrl);
+
+      if (assocRes.status === 404) {
+        throw new NotFoundError(
+          'COMPANY_NOT_FOUND',
+          `Company ${companyId} no existe en HubSpot`,
+          { companyId }
+        );
+      }
+      if (!assocRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${assocRes.status} al leer asociaciones a direcciones`,
+          { companyId, status: assocRes.status }
+        );
+      }
+
+      const assocBody = (await assocRes.json()) as {
+        results?: Array<{ toObjectId?: string | number }>;
+      };
+      const ids = (assocBody.results ?? [])
+        .map((r) => r.toObjectId)
+        .filter((id): id is string | number => id !== undefined && id !== null)
+        .map((id) => String(id));
+
+      if (ids.length === 0) return [];
+
+      const batchUrl = `${HUBSPOT_BASE_URL}/crm/v3/objects/2-53973802/batch/read`;
+      const batchRes = await hubspotFetch(batchUrl, {
+        method: 'POST',
+        body: JSON.stringify({
+          inputs: ids.map((id) => ({ id })),
+          properties: ['direction', 'hs_createdate'],
+        }),
+      });
+
+      if (!batchRes.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${batchRes.status} al batch-read de direcciones`,
+          { companyId, status: batchRes.status }
+        );
+      }
+
+      const batchBody = (await batchRes.json()) as {
+        results?: Array<{
+          id?: string;
+          properties?: { direction?: string; hs_createdate?: string };
+        }>;
+      };
+
+      return (batchBody.results ?? [])
+        .map((r) => ({
+          id: r.id ?? '',
+          direction: r.properties?.direction?.trim() ?? '',
+          hsCreatedate: r.properties?.hs_createdate ?? '',
+        }))
+        .sort((a, b) => a.hsCreatedate.localeCompare(b.hsCreatedate))
+        .map(({ id, direction }) => ({ id, direction }));
     },
 
     async findJuridicoContactIds(dealId: string): Promise<string[]> {
