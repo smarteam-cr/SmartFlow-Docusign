@@ -36,6 +36,7 @@ export interface EnvelopesServiceDeps {
   docusign: DocusignAdapter;
   templateMapping: TemplateMappingResolver;
   templateRoles: TemplateRolesResolver;
+  portalId: string;
 }
 
 async function resolveCliente(
@@ -208,6 +209,24 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
             routingOrder: 3,
           },
         ],
+        customFields: {
+          hubspot_deal_id: input.dealId,
+          hubspot_portal_id: deps.portalId,
+        },
+      });
+
+      await deps.hubspot.updateDealProperties(input.dealId, {
+        docusign_latest_envelope_id: envelopeId,
+        docusign_latest_status: 'sent',
+        docusign_latest_sent_at: new Date().toISOString().split('T')[0]!,
+        docusign_latest_pdf_url: '',
+        docusign_latest_signed_at: '',
+      });
+
+      await deps.hubspot.createNoteForDeal({
+        dealId: input.dealId,
+        body: `<p>Enviado para firma. Envelope: ${envelopeId}. Firmantes: ${owner.name} → ${proveedorName} → ${clienteName}</p>`,
+        contactIds: [proveedor.id, cliente.id],
       });
 
       return {

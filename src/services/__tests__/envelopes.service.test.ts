@@ -99,6 +99,12 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     getDealLatestQuote: jest
       .fn<HubSpotAdapter['getDealLatestQuote']>()
       .mockResolvedValue(fullQuote),
+    updateDealProperties: jest
+      .fn<HubSpotAdapter['updateDealProperties']>()
+      .mockResolvedValue(undefined),
+    createNoteForDeal: jest
+      .fn<HubSpotAdapter['createNoteForDeal']>()
+      .mockResolvedValue({ noteId: 'n-1' }),
     ...overrides,
   };
   return fake;
@@ -112,6 +118,9 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
     sendEnvelopeFromTemplate: jest
       .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
       .mockResolvedValue({ envelopeId: 'env-123', status: 'sent' }),
+    downloadCombinedDocument: jest
+      .fn<DocusignAdapter['downloadCombinedDocument']>()
+      .mockResolvedValue(Buffer.from('pdf')),
     ...overrides,
   };
 }
@@ -166,6 +175,7 @@ describe('envelopes.service — happy paths', () => {
       docusign,
       templateMapping,
       templateRoles,
+      portalId: 'portal-1',
     });
 
     const result = await service.sendFromTemplate({
@@ -222,7 +232,21 @@ describe('envelopes.service — happy paths', () => {
           routingOrder: 3,
         },
       ],
+      customFields: {
+        hubspot_deal_id: '12345',
+        hubspot_portal_id: 'portal-1',
+      },
     });
+
+    expect(hubspot.updateDealProperties).toHaveBeenCalledWith('12345', expect.objectContaining({
+      docusign_latest_envelope_id: 'env-123',
+      docusign_latest_status: 'sent',
+    }));
+
+    expect(hubspot.createNoteForDeal).toHaveBeenCalledWith(expect.objectContaining({
+      dealId: '12345',
+      contactIds: ['c-proveedor', 'c-ada'],
+    }));
   });
 
   test('Propietario lleva el tab #HREF_UrlCotizacion entre los prefillTabs', async () => {
@@ -233,6 +257,7 @@ describe('envelopes.service — happy paths', () => {
       docusign,
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await service.sendFromTemplate({
@@ -275,6 +300,7 @@ describe('envelopes.service — happy paths', () => {
       docusign,
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await service.sendFromTemplate({
@@ -302,6 +328,7 @@ describe('envelopes.service — happy paths', () => {
       docusign: makeFakeDocusign(),
       templateMapping,
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await service.sendFromTemplate({
@@ -328,6 +355,7 @@ describe('envelopes.service — happy paths', () => {
       docusign: makeFakeDocusign(),
       templateMapping,
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await service.sendFromTemplate({
@@ -354,6 +382,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -367,6 +396,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -388,6 +418,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -406,6 +437,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -423,6 +455,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles,
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({
@@ -446,6 +479,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -463,6 +497,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -491,6 +526,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -509,6 +545,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -526,6 +563,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -544,6 +582,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign,
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -568,6 +607,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     await expect(
@@ -586,6 +626,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '99', templateId: 'tpl', contactId: 'c-ada' })
@@ -605,6 +646,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign,
       templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
@@ -626,6 +668,7 @@ describe('envelopes.service — errores estructurales', () => {
       docusign,
       templateMapping,
       templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
     });
 
     const result = await service.sendFromTemplate({
