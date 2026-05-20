@@ -19,6 +19,41 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+describe('DocusignAdapter.downloadCombinedDocument', () => {
+  test('returns a Buffer from the combined document endpoint', async () => {
+    const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        arrayBuffer: () => Promise.resolve(pdfBytes.buffer),
+      } as Response)
+    );
+
+    const result = await adapter.downloadCombinedDocument('env-abc');
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result.length).toBe(4);
+
+    const [url] = (global.fetch as jest.Mock).mock.calls[0] as [string];
+    expect(url).toContain('/envelopes/env-abc/documents/combined');
+  });
+
+  test('throws DOCUSIGN_UNAVAILABLE on non-ok response', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('error'),
+      } as Response)
+    );
+
+    await expect(adapter.downloadCombinedDocument('env-bad')).rejects.toMatchObject({
+      code: 'DOCUSIGN_UNAVAILABLE',
+      httpStatus: 502,
+    });
+  });
+});
+
 describe('DocusignAdapter.sendEnvelopeFromTemplate', () => {
   test('textTab con prefijo #HREF_ recibe name = value para ser clickable', async () => {
     const captured: Array<Record<string, unknown>> = [];

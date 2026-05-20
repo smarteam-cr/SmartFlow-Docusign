@@ -27,17 +27,9 @@ export interface SendEnvelopeResult {
 }
 
 export interface DocusignAdapter {
-  /**
-   * Lists all templates available in the DocuSign account.
-   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
-   */
   listTemplates(): Promise<TemplateSummary[]>;
-
-  /**
-   * Creates and sends an envelope from a template.
-   * @throws ExternalServiceError(DOCUSIGN_UNAVAILABLE)
-   */
   sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult>;
+  downloadCombinedDocument(envelopeId: string): Promise<Buffer>;
 }
 
 export interface DocusignAdapterConfig {
@@ -171,6 +163,19 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
         envelopeId: body.envelopeId,
         status: body.status ?? 'sent',
       };
+    },
+
+    async downloadCombinedDocument(envelopeId: string): Promise<Buffer> {
+      const url = `${accountUrl}/envelopes/${encodeURIComponent(envelopeId)}/documents/combined`;
+      const res = await docusignFetch(url, { method: 'GET' });
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          `DocuSign respondió ${res.status} al descargar PDF del envelope ${envelopeId}`,
+          { envelopeId, status: res.status }
+        );
+      }
+      return Buffer.from(await res.arrayBuffer());
     },
   };
 }
