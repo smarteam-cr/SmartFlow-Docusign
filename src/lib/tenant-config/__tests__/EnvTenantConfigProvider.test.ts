@@ -12,6 +12,8 @@ const sampleEnv: Env = {
   DOCUSIGN_ACCOUNT_ID: 'account-id',
   DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
   TEMPLATE_PROVEEDOR_MAP: '{}',
+  DOCUSIGN_CONNECT_HMAC_SECRET: 'hmac-secret',
+  HUBSPOT_PORTAL_ID: '12345678',
 };
 
 describe('createEnvTenantConfigProvider', () => {

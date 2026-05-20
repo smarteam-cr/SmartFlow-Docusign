@@ -17,3 +17,10 @@ export type {
   ContactsServiceDeps,
 } from './contacts.service.js';
 export { createContactsService } from './contacts.service.js';
+
+export type {
+  EnvelopeLifecycleService,
+  EnvelopeLifecycleDeps,
+  EnvelopeEvent,
+} from './envelope-lifecycle.service.js';
+export { createEnvelopeLifecycleService } from './envelope-lifecycle.service.js';

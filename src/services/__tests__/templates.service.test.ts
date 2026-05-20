@@ -12,6 +12,9 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
     sendEnvelopeFromTemplate: jest
       .fn<DocusignAdapter['sendEnvelopeFromTemplate']>()
       .mockResolvedValue({ envelopeId: 'env-1', status: 'sent' }),
+    downloadCombinedDocument: jest
+      .fn<DocusignAdapter['downloadCombinedDocument']>()
+      .mockResolvedValue(Buffer.from('pdf')),
     ...overrides,
   };
 }
