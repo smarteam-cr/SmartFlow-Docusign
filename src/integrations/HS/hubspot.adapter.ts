@@ -132,6 +132,15 @@ export interface HubSpotAdapter {
    * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
    */
   getDealLatestQuote(dealId: string): Promise<Quote>;
+
+  updateDealProperties(dealId: string, properties: Record<string, string>): Promise<void>;
+
+  createNoteForDeal(params: {
+    dealId: string;
+    body: string;
+    contactIds?: string[];
+    attachmentIds?: string[];
+  }): Promise<{ noteId: string }>;
 }
 
 export interface HubSpotAdapterConfig {
@@ -562,6 +571,78 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         }
       }
       return [...ids];
+    },
+
+    async updateDealProperties(dealId: string, properties: Record<string, string>): Promise<void> {
+      const url = `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}`;
+      const res = await hubspotFetch(url, {
+        method: 'PATCH',
+        body: JSON.stringify({ properties }),
+      });
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'DEAL_NOT_FOUND',
+          `Deal ${dealId} no existe en HubSpot`,
+          { dealId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al actualizar Deal ${dealId}`,
+          { dealId, status: res.status }
+        );
+      }
+    },
+
+    async createNoteForDeal(params: {
+      dealId: string;
+      body: string;
+      contactIds?: string[];
+      attachmentIds?: string[];
+    }): Promise<{ noteId: string }> {
+      const associations: Array<{
+        to: { id: string };
+        types: Array<{ associationCategory: string; associationTypeId: number }>;
+      }> = [
+        {
+          to: { id: params.dealId },
+          types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 214 }],
+        },
+      ];
+
+      for (const contactId of params.contactIds ?? []) {
+        associations.push({
+          to: { id: contactId },
+          types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: 202 }],
+        });
+      }
+
+      const properties: Record<string, string> = {
+        hs_note_body: params.body,
+        hs_timestamp: new Date().toISOString(),
+      };
+
+      if (params.attachmentIds && params.attachmentIds.length > 0) {
+        properties.hs_attachment_ids = params.attachmentIds.join(';');
+      }
+
+      const url = `${HUBSPOT_BASE_URL}/crm/v3/objects/notes`;
+      const res = await hubspotFetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ properties, associations }),
+      });
+
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al crear Note para Deal ${params.dealId}`,
+          { dealId: params.dealId, status: res.status }
+        );
+      }
+
+      const resBody = (await res.json()) as { id?: string };
+      return { noteId: resBody.id ?? '' };
     },
   };
 }

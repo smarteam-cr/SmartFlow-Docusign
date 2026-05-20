@@ -378,6 +378,34 @@ describe('HubSpotAdapter.getDealLatestQuote', () => {
   });
 });
 
+describe('HubSpotAdapter.updateDealProperties', () => {
+  test('happy path: PATCH 200 resolves without error', async () => {
+    mockFetchSequence([{ status: 200, body: { id: 'd-1' } }]);
+    await expect(adapter.updateDealProperties('d-1', { docusign_latest_status: 'sent' })).resolves.toBeUndefined();
+
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/crm/v3/objects/deals/d-1');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ properties: { docusign_latest_status: 'sent' } });
+  });
+
+  test('404 throws DEAL_NOT_FOUND', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+    await expect(adapter.updateDealProperties('d-ghost', {})).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+
+  test('500 throws HUBSPOT_UNAVAILABLE', async () => {
+    mockFetchSequence([{ status: 500, body: {} }]);
+    await expect(adapter.updateDealProperties('d-1', {})).rejects.toMatchObject({
+      code: 'HUBSPOT_UNAVAILABLE',
+      httpStatus: 502,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([
