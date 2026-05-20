@@ -69,7 +69,11 @@ export function createWebhooksController(deps: {
 }): WebhooksController {
   return {
     async handleDocusign(request: FastifyRequest, reply: FastifyReply) {
-      const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody ?? '';
+      const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody;
+      if (rawBody === undefined) {
+        request.log.error('rawBody not available — content type parser may be misconfigured');
+        return reply.code(500).send({ error: 'WEBHOOK_RAW_BODY_MISSING' });
+      }
       const signature = request.headers['x-docusign-signature-1'] as string | undefined;
 
       if (!signature || !verifyHmac(rawBody, signature, deps.hmacSecret)) {

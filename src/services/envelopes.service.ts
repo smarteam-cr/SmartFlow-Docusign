@@ -13,6 +13,7 @@ import type {
   TemplateMappingResolver,
 } from '../lib/template-mapping/index.js';
 import type { TemplateRolesResolver } from '../lib/template-roles/index.js';
+import { toISODate } from '../utils/toISODate.js';
 
 export interface SendFromTemplateInput {
   dealId: string;
@@ -218,7 +219,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       await deps.hubspot.updateDealProperties(input.dealId, {
         docusign_latest_envelope_id: envelopeId,
         docusign_latest_status: 'sent',
-        docusign_latest_sent_at: new Date().toISOString().split('T')[0]!,
+        docusign_latest_sent_at: toISODate(),
         docusign_latest_pdf_url: '',
         docusign_latest_signed_at: '',
       });

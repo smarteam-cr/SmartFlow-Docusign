@@ -1,6 +1,6 @@
-import type { HubSpotAdapter } from '../integrations/HS/hubspot.adapter.js';
-import type { HubSpotFilesAdapter } from '../integrations/HS/hubspot-files.adapter.js';
+import type { HubSpotAdapter, HubSpotFilesAdapter } from '../integrations/HS/index.js';
 import type { DocusignAdapter } from '../integrations/Docusign/index.js';
+import { toISODate } from '../utils/toISODate.js';
 
 export interface EnvelopeEvent {
   envelopeId: string;
@@ -52,7 +52,7 @@ export function createEnvelopeLifecycleService(
           await deps.hubspot.updateDealProperties(event.dealId, {
             docusign_latest_status: 'signed',
             docusign_latest_pdf_url: pdfUrl,
-            docusign_latest_signed_at: new Date().toISOString().split('T')[0]!,
+            docusign_latest_signed_at: toISODate(),
           });
 
           await deps.hubspot.createNoteForDeal({
