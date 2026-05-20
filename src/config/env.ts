@@ -15,6 +15,9 @@ const envSchema = z.object({
   DOCUSIGN_BASE_PATH: z.string().min(1, 'DOCUSIGN_BASE_PATH is required'),
 
   TEMPLATE_PROVEEDOR_MAP: z.string().min(1, 'TEMPLATE_PROVEEDOR_MAP is required'),
+
+  DOCUSIGN_CONNECT_HMAC_SECRET: z.string().min(1, 'DOCUSIGN_CONNECT_HMAC_SECRET is required'),
+  HUBSPOT_PORTAL_ID: z.string().min(1, 'HUBSPOT_PORTAL_ID is required'),
 });
 
 export type Env = z.infer<typeof envSchema>;

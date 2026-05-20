@@ -12,6 +12,8 @@ describe('parseEnv', () => {
     DOCUSIGN_ACCOUNT_ID: 'account-1',
     DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
     TEMPLATE_PROVEEDOR_MAP: '{"82c6188c-f743-4bba-a762-49ae72d9aafe":"contact-id-123"}',
+    DOCUSIGN_CONNECT_HMAC_SECRET: 'my-hmac-secret',
+    HUBSPOT_PORTAL_ID: '12345678',
   };
 
   test('parses a valid env object', () => {
@@ -51,6 +53,16 @@ describe('parseEnv', () => {
 
   test('throws when TEMPLATE_PROVEEDOR_MAP is missing', () => {
     const { TEMPLATE_PROVEEDOR_MAP: _omit, ...rest } = validEnv;
+    expect(() => parseEnv(rest)).toThrow();
+  });
+
+  test('throws when DOCUSIGN_CONNECT_HMAC_SECRET is missing', () => {
+    const { DOCUSIGN_CONNECT_HMAC_SECRET: _omit, ...rest } = validEnv;
+    expect(() => parseEnv(rest)).toThrow();
+  });
+
+  test('throws when HUBSPOT_PORTAL_ID is missing', () => {
+    const { HUBSPOT_PORTAL_ID: _omit, ...rest } = validEnv;
     expect(() => parseEnv(rest)).toThrow();
   });
 });
