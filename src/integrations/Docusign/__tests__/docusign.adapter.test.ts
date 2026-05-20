@@ -55,6 +55,55 @@ describe('DocusignAdapter.downloadCombinedDocument', () => {
 });
 
 describe('DocusignAdapter.sendEnvelopeFromTemplate', () => {
+  test('includes customFields.textCustomFields when customFields is provided', async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    jest.spyOn(global, 'fetch').mockImplementation((_, init) => {
+      captured.push(JSON.parse((init as RequestInit).body as string));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ envelopeId: 'env-cf', status: 'sent' }),
+      } as Response);
+    });
+
+    await adapter.sendEnvelopeFromTemplate({
+      templateId: 'tpl-1',
+      roles: [{ roleName: 'Propietario', name: 'X', email: 'x@y.co', routingOrder: 1 }],
+      customFields: { hubspot_deal_id: '999', hubspot_portal_id: '123' },
+    });
+
+    const body = captured[0] as {
+      customFields?: {
+        textCustomFields?: Array<{ name: string; value: string; show: string; required: string }>;
+      };
+    };
+    expect(body.customFields?.textCustomFields).toEqual(
+      expect.arrayContaining([
+        { name: 'hubspot_deal_id', value: '999', show: 'false', required: 'false' },
+        { name: 'hubspot_portal_id', value: '123', show: 'false', required: 'false' },
+      ])
+    );
+  });
+
+  test('omits customFields from body when not provided', async () => {
+    const captured: Array<Record<string, unknown>> = [];
+    jest.spyOn(global, 'fetch').mockImplementation((_, init) => {
+      captured.push(JSON.parse((init as RequestInit).body as string));
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ envelopeId: 'env-1', status: 'sent' }),
+      } as Response);
+    });
+
+    await adapter.sendEnvelopeFromTemplate({
+      templateId: 'tpl-1',
+      roles: [{ roleName: 'Propietario', name: 'X', email: 'x@y.co', routingOrder: 1 }],
+    });
+
+    expect(captured[0]).not.toHaveProperty('customFields');
+  });
+
   test('textTab con prefijo #HREF_ recibe name = value para ser clickable', async () => {
     const captured: Array<Record<string, unknown>> = [];
     jest.spyOn(global, 'fetch').mockImplementation((_, init) => {

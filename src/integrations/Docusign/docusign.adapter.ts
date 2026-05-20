@@ -19,6 +19,7 @@ export interface TemplateRole {
 export interface SendEnvelopeInput {
   templateId: string;
   roles: TemplateRole[];
+  customFields?: Record<string, string>;
 }
 
 export interface SendEnvelopeResult {
@@ -137,6 +138,18 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
             : {}),
         })),
         status: 'sent',
+        ...(input.customFields && Object.keys(input.customFields).length > 0
+          ? {
+              customFields: {
+                textCustomFields: Object.entries(input.customFields).map(([name, value]) => ({
+                  name,
+                  value,
+                  show: 'false',
+                  required: 'false',
+                })),
+              },
+            }
+          : {}),
       };
 
       const res = await docusignFetch(url, { method: 'POST', jsonBody: requestBody });
