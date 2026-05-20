@@ -406,6 +406,74 @@ describe('HubSpotAdapter.updateDealProperties', () => {
   });
 });
 
+describe('HubSpotAdapter.createNoteForDeal', () => {
+  test('happy path: POST 201 returns noteId', async () => {
+    mockFetchSequence([{ status: 201, body: { id: 'note-1' } }]);
+    const result = await adapter.createNoteForDeal({
+      dealId: 'd-1',
+      body: '<p>Test note</p>',
+    });
+    expect(result).toEqual({ noteId: 'note-1' });
+
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/crm/v3/objects/notes');
+    expect(init.method).toBe('POST');
+  });
+
+  test('includes hs_attachment_ids when attachmentIds provided', async () => {
+    mockFetchSequence([{ status: 201, body: { id: 'note-2' } }]);
+    await adapter.createNoteForDeal({
+      dealId: 'd-1',
+      body: '<p>With attachment</p>',
+      attachmentIds: ['file-a', 'file-b'],
+    });
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    const parsed = JSON.parse(init.body as string) as { properties: Record<string, string> };
+    expect(parsed.properties.hs_attachment_ids).toBe('file-a;file-b');
+  });
+
+  test('includes contact associations when contactIds provided', async () => {
+    mockFetchSequence([{ status: 201, body: { id: 'note-3' } }]);
+    await adapter.createNoteForDeal({
+      dealId: 'd-1',
+      body: '<p>With contacts</p>',
+      contactIds: ['c-1', 'c-2'],
+    });
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    const parsed = JSON.parse(init.body as string) as {
+      associations: Array<{ to: { id: string }; types: Array<{ associationTypeId: number }> }>;
+    };
+    expect(parsed.associations).toHaveLength(3);
+    expect(parsed.associations[0]!.to.id).toBe('d-1');
+    expect(parsed.associations[0]!.types[0]!.associationTypeId).toBe(214);
+    expect(parsed.associations[1]!.to.id).toBe('c-1');
+    expect(parsed.associations[1]!.types[0]!.associationTypeId).toBe(202);
+    expect(parsed.associations[2]!.to.id).toBe('c-2');
+    expect(parsed.associations[2]!.types[0]!.associationTypeId).toBe(202);
+  });
+
+  test('only deal association when no contactIds', async () => {
+    mockFetchSequence([{ status: 201, body: { id: 'note-4' } }]);
+    await adapter.createNoteForDeal({ dealId: 'd-1', body: '<p>Solo deal</p>' });
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0] as [string, RequestInit];
+    const parsed = JSON.parse(init.body as string) as {
+      associations: Array<{ to: { id: string } }>;
+    };
+    expect(parsed.associations).toHaveLength(1);
+    expect(parsed.associations[0]!.to.id).toBe('d-1');
+  });
+
+  test('500 throws HUBSPOT_UNAVAILABLE', async () => {
+    mockFetchSequence([{ status: 500, body: {} }]);
+    await expect(
+      adapter.createNoteForDeal({ dealId: 'd-1', body: '<p>fail</p>' })
+    ).rejects.toMatchObject({ code: 'HUBSPOT_UNAVAILABLE', httpStatus: 502 });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([
