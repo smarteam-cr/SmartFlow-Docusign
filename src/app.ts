@@ -68,23 +68,22 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   fastify.setValidatorCompiler(validatorCompiler);
   fastify.setSerializerCompiler(serializerCompiler);
 
-  // HubSpot's `hubspot.fetch` strips the Content-Type header (only Authorization
-  // is allowed). The body still arrives as a JSON string, so we register a
-  // catch-all parser that JSON-parses any body that isn't already handled.
-  fastify.addContentTypeParser(
-    '*',
-    { parseAs: 'string' },
-    (req, body, done) => {
-      if (!body) return done(null, undefined);
-      const raw = body as string;
-      (req as FastifyRequest & { rawBody?: string }).rawBody = raw;
-      try {
-        done(null, JSON.parse(raw));
-      } catch (err) {
-        done(err as Error, undefined);
-      }
+  // Parse JSON bodies AND capture the raw string for HMAC verification.
+  // Overrides Fastify's built-in application/json parser so rawBody is always available.
+  // Also handles HubSpot's hubspot.fetch which strips Content-Type (arrives as */octet-stream).
+  function rawBodyParser(req: FastifyRequest, body: string, done: (err: Error | null, result?: unknown) => void) {
+    if (!body) return done(null, undefined);
+    req.rawBody = body;
+    try {
+      done(null, JSON.parse(body));
+    } catch (err) {
+      done(err as Error, undefined);
     }
-  );
+  }
+
+  fastify.removeContentTypeParser('application/json');
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, rawBodyParser);
+  fastify.addContentTypeParser('*', { parseAs: 'string' }, rawBodyParser);
 
   // 2) Global error handler (AppError → HTTP)
   registerErrorHandler(fastify);
