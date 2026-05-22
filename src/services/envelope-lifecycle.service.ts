@@ -47,7 +47,7 @@ export function createEnvelopeLifecycleService(
             access: 'PRIVATE',
           });
 
-          const pdfUrl = `https://app.hubspot.com/files/${event.portalId}/file/${fileId}`;
+          const pdfUrl = `https://app.hubspot.com/file-preview/${event.portalId}/file/${fileId}`;
 
           await deps.hubspot.updateDealProperties(event.dealId, {
             docusign_latest_status: 'signed',
