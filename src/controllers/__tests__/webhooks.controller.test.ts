@@ -37,6 +37,9 @@ const validPayload = {
           { name: 'hubspot_portal_id', value: 'p-1' },
         ],
       },
+      recipients: {
+        signers: [],
+      },
     },
   },
 };
@@ -89,8 +92,8 @@ describe('WebhooksController.handleDocusign', () => {
     expect(reply.code).toHaveBeenCalledWith(200);
     expect(reply.send).toHaveBeenCalledWith({ received: true });
     expect(lifecycle.handleEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: 'envelope-completed',
       envelopeId: 'env-001',
-      status: 'completed',
       dealId: 'd-1',
       portalId: 'p-1',
     }));

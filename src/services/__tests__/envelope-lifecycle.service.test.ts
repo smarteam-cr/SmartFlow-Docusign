@@ -37,8 +37,8 @@ function makeFakeDeps(overrides?: Partial<EnvelopeLifecycleDeps>): EnvelopeLifec
 
 function baseEvent(overrides?: Partial<EnvelopeEvent>): EnvelopeEvent {
   return {
+    eventType: 'envelope-completed',
     envelopeId: 'env-001',
-    status: 'completed',
     dealId: 'd-1',
     portalId: 'p-1',
     ...overrides,
@@ -93,7 +93,7 @@ describe('EnvelopeLifecycleService.handleEvent — sent', () => {
   test('updates deal properties with status sent', async () => {
     const deps = makeFakeDeps();
     const service = createEnvelopeLifecycleService(deps);
-    await service.handleEvent(baseEvent({ status: 'sent' }));
+    await service.handleEvent(baseEvent({ eventType: 'envelope-sent' }));
 
     expect(deps.hubspot.updateDealProperties).toHaveBeenCalledWith('d-1', {
       docusign_latest_status: 'sent',
@@ -106,7 +106,7 @@ describe('EnvelopeLifecycleService.handleEvent — declined', () => {
   test('updates deal properties + creates note with reason', async () => {
     const deps = makeFakeDeps();
     const service = createEnvelopeLifecycleService(deps);
-    await service.handleEvent(baseEvent({ status: 'declined', declinedReason: 'No estoy de acuerdo' }));
+    await service.handleEvent(baseEvent({ eventType: 'envelope-declined', declinedReason: 'No estoy de acuerdo' }));
 
     expect(deps.hubspot.updateDealProperties).toHaveBeenCalledWith('d-1', {
       docusign_latest_status: 'declined',
@@ -122,7 +122,7 @@ describe('EnvelopeLifecycleService.handleEvent — voided', () => {
   test('updates deal properties + creates note with reason', async () => {
     const deps = makeFakeDeps();
     const service = createEnvelopeLifecycleService(deps);
-    await service.handleEvent(baseEvent({ status: 'voided', voidedReason: 'Error en datos' }));
+    await service.handleEvent(baseEvent({ eventType: 'envelope-voided', voidedReason: 'Error en datos' }));
 
     expect(deps.hubspot.updateDealProperties).toHaveBeenCalledWith('d-1', {
       docusign_latest_status: 'voided',
@@ -134,11 +134,24 @@ describe('EnvelopeLifecycleService.handleEvent — voided', () => {
   });
 });
 
-describe('EnvelopeLifecycleService.handleEvent — unknown status', () => {
+describe('EnvelopeLifecycleService.handleEvent — recipient-completed', () => {
+  test('updates deal status to signing', async () => {
+    const deps = makeFakeDeps();
+    const service = createEnvelopeLifecycleService(deps);
+    await service.handleEvent(baseEvent({ eventType: 'recipient-completed' }));
+
+    expect(deps.hubspot.updateDealProperties).toHaveBeenCalledWith('d-1', {
+      docusign_latest_status: 'signing',
+    });
+    expect(deps.hubspot.createNoteForDeal).not.toHaveBeenCalled();
+  });
+});
+
+describe('EnvelopeLifecycleService.handleEvent — unknown event', () => {
   test('does nothing and does not throw', async () => {
     const deps = makeFakeDeps();
     const service = createEnvelopeLifecycleService(deps);
-    await expect(service.handleEvent(baseEvent({ status: 'recipient-completed' }))).resolves.toBeUndefined();
+    await expect(service.handleEvent(baseEvent({ eventType: 'envelope-purge' }))).resolves.toBeUndefined();
 
     expect(deps.hubspot.updateDealProperties).not.toHaveBeenCalled();
     expect(deps.hubspot.createNoteForDeal).not.toHaveBeenCalled();

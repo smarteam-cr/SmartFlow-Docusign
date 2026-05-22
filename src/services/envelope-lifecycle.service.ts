@@ -3,8 +3,8 @@ import type { DocusignAdapter } from '../integrations/Docusign/index.js';
 import { toISODate } from '../utils/toISODate.js';
 
 export interface EnvelopeEvent {
+  eventType: string;
   envelopeId: string;
-  status: string;
   dealId: string;
   portalId: string;
   recipientEvents?: Array<{
@@ -33,8 +33,8 @@ export function createEnvelopeLifecycleService(
     async handleEvent(event: EnvelopeEvent): Promise<void> {
       if (!event.dealId) return;
 
-      switch (event.status) {
-        case 'completed': {
+      switch (event.eventType) {
+        case 'envelope-completed': {
           const filename = `deal-${event.dealId}-${event.envelopeId}.pdf`;
 
           const existing = await deps.hubspotFiles.findFileByName(filename);
@@ -63,13 +63,19 @@ export function createEnvelopeLifecycleService(
           break;
         }
 
-        case 'sent':
+        case 'envelope-sent':
           await deps.hubspot.updateDealProperties(event.dealId, {
             docusign_latest_status: 'sent',
           });
           break;
 
-        case 'declined':
+        case 'recipient-completed':
+          await deps.hubspot.updateDealProperties(event.dealId, {
+            docusign_latest_status: 'signing',
+          });
+          break;
+
+        case 'envelope-declined':
           await deps.hubspot.updateDealProperties(event.dealId, {
             docusign_latest_status: 'declined',
           });
@@ -79,7 +85,7 @@ export function createEnvelopeLifecycleService(
           });
           break;
 
-        case 'voided':
+        case 'envelope-voided':
           await deps.hubspot.updateDealProperties(event.dealId, {
             docusign_latest_status: 'voided',
           });

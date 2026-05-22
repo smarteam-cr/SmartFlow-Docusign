@@ -28,12 +28,13 @@ interface DocuSignConnectPayload {
 }
 
 function parseConnectPayload(payload: DocuSignConnectPayload): EnvelopeEvent | null {
+  const eventType = payload.event ?? '';
+  if (!eventType) return null;
+
   const envelopeId = payload.data?.envelopeId;
   if (!envelopeId) return null;
 
   const summary = payload.data?.envelopeSummary;
-  const status = summary?.status ?? '';
-  if (!status) return null;
 
   const customFields = summary?.customFields?.textCustomFields ?? [];
   const dealId = customFields.find((f) => f.name === 'hubspot_deal_id')?.value ?? '';
@@ -49,8 +50,8 @@ function parseConnectPayload(payload: DocuSignConnectPayload): EnvelopeEvent | n
   const declinedReason = signers.find((s) => s.declinedReason)?.declinedReason;
 
   return {
+    eventType,
     envelopeId,
-    status,
     dealId,
     portalId,
     recipientEvents: recipientEvents.length > 0 ? recipientEvents : undefined,
