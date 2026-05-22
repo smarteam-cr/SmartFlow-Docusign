@@ -25,12 +25,12 @@ export function createHubSpotFilesAdapter(config: HubSpotFilesAdapterConfig): Hu
       const url = `${HUBSPOT_BASE_URL}/files/v3/files`;
       const formData = new FormData();
       formData.append('file', new Blob([params.buffer]), params.filename);
+      formData.append('folderPath', '/contratos-firmados');
       formData.append(
         'options',
         JSON.stringify({
           access: params.access,
           name: params.filename,
-          folderPath: '/contratos-firmados',
         })
       );
 
