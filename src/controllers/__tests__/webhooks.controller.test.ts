@@ -3,11 +3,10 @@ import { createHmac } from 'node:crypto';
 import { createWebhooksController } from '../webhooks.controller.js';
 import type { EnvelopeLifecycleService } from '../../services/envelope-lifecycle.service.js';
 
-const HMAC_SECRET = Buffer.from('test-secret').toString('base64');
+const HMAC_SECRET = 'test-secret';
 
 function sign(body: string): string {
-  const keyBytes = Buffer.from(HMAC_SECRET, 'base64');
-  return createHmac('sha256', keyBytes).update(body, 'utf8').digest('base64');
+  return createHmac('sha256', HMAC_SECRET).update(body, 'utf8').digest('base64');
 }
 
 function makeFakeLifecycle(): EnvelopeLifecycleService {
