@@ -474,6 +474,60 @@ describe('HubSpotAdapter.createNoteForDeal', () => {
   });
 });
 
+describe('HubSpotAdapter.getDealProperties', () => {
+  test('returns requested properties as Record<string, string>', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: {
+        id: 'd-1',
+        properties: {
+          docusign_latest_status: 'sent',
+          docusign_latest_envelope_id: 'env-abc',
+        },
+      },
+    }]);
+
+    const result = await adapter.getDealProperties('d-1', [
+      'docusign_latest_status',
+      'docusign_latest_envelope_id',
+    ]);
+    expect(result).toEqual({
+      docusign_latest_status: 'sent',
+      docusign_latest_envelope_id: 'env-abc',
+    });
+
+    const [url] = (global.fetch as jest.Mock).mock.calls[0] as [string];
+    expect(url).toContain('properties=docusign_latest_status');
+    expect(url).toContain('docusign_latest_envelope_id');
+  });
+
+  test('returns empty strings for null/undefined properties', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: { id: 'd-1', properties: { docusign_latest_status: null } },
+    }]);
+
+    const result = await adapter.getDealProperties('d-1', ['docusign_latest_status']);
+    expect(result.docusign_latest_status).toBe('');
+  });
+
+  test('throws DEAL_NOT_FOUND on 404', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+    await expect(adapter.getDealProperties('d-ghost', ['x'])).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+
+  test('throws HUBSPOT_UNAVAILABLE on 500', async () => {
+    mockFetchSequence([{ status: 500, body: {} }]);
+    await expect(adapter.getDealProperties('d-1', ['x'])).rejects.toMatchObject({
+      code: 'HUBSPOT_UNAVAILABLE',
+      httpStatus: 502,
+    });
+  });
+});
+
 describe('HubSpotAdapter.getDealOwner', () => {
   test('happy path: retorna owner con nombre y email', async () => {
     mockFetchSequence([
