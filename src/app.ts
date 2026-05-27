@@ -28,6 +28,9 @@ import { createTemplatesController } from './controllers/templates.controller.js
 import { createEnvelopesController } from './controllers/envelopes.controller.js';
 import { createContactsController } from './controllers/contacts.controller.js';
 import { createWebhooksController } from './controllers/webhooks.controller.js';
+import { createVoidController } from './controllers/void.controller.js';
+import { createStatusController } from './controllers/status.controller.js';
+import { createEnvelopeStatusService } from './services/envelope-status.service.js';
 import { registerV1Routes } from './routes/index.js';
 import { registerWebhookRoutes } from './routes/webhooks.routes.js';
 import { registerErrorHandler } from './middlewares/errorHandler.js';
@@ -111,10 +114,14 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
     docusign,
   });
 
+  const statusService = createEnvelopeStatusService({ hubspot });
+
   const templatesController = createTemplatesController(templatesService);
   const envelopesController = createEnvelopesController(envelopesService);
   const contactsService = createContactsService({ hubspot });
   const contactsController = createContactsController(contactsService);
+  const voidController = createVoidController(envelopesService);
+  const statusController = createStatusController(statusService);
   const webhooksController = createWebhooksController({
     lifecycleService,
     hmacSecret: env.DOCUSIGN_CONNECT_HMAC_SECRET,
@@ -127,6 +134,8 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
         templatesController,
         envelopesController,
         contactsController,
+        voidController,
+        statusController,
       });
       await registerWebhookRoutes(instance, { webhooksController });
     },
