@@ -19,6 +19,7 @@ import {
   NotFoundError,
   ValidationError,
   ExternalServiceError,
+  ConflictError,
 } from '../../lib/errors/index.js';
 
 const ada: Contact = {
@@ -105,6 +106,9 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     createNoteForDeal: jest
       .fn<HubSpotAdapter['createNoteForDeal']>()
       .mockResolvedValue({ noteId: 'n-1' }),
+    getDealProperties: jest
+      .fn<HubSpotAdapter['getDealProperties']>()
+      .mockResolvedValue({}),
     ...overrides,
   };
   return fake;
@@ -121,6 +125,12 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
     downloadCombinedDocument: jest
       .fn<DocusignAdapter['downloadCombinedDocument']>()
       .mockResolvedValue(Buffer.from('pdf')),
+    getEnvelopeStatus: jest
+      .fn<DocusignAdapter['getEnvelopeStatus']>()
+      .mockResolvedValue('sent'),
+    voidEnvelope: jest
+      .fn<DocusignAdapter['voidEnvelope']>()
+      .mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -679,5 +689,113 @@ describe('envelopes.service — errores estructurales', () => {
 
     expect(result.envelopeId).toBeDefined();
     expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('envelopes.service — voidEnvelope', () => {
+  test('happy path: status sent → void called → deal updated → note created', async () => {
+    const hubspot = makeFakeHubspot();
+    const docusign = makeFakeDocusign({
+      getEnvelopeStatus: jest
+        .fn<DocusignAdapter['getEnvelopeStatus']>()
+        .mockResolvedValue('sent'),
+      voidEnvelope: jest
+        .fn<DocusignAdapter['voidEnvelope']>()
+        .mockResolvedValue(undefined),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'Error en datos del contrato' });
+
+    expect(docusign.getEnvelopeStatus).toHaveBeenCalledWith('env-1');
+    expect(docusign.voidEnvelope).toHaveBeenCalledWith('env-1', 'Error en datos del contrato');
+    expect(hubspot.updateDealProperties).toHaveBeenCalledWith('d-1', {
+      docusign_latest_status: 'voided',
+    });
+    expect(hubspot.createNoteForDeal).toHaveBeenCalledWith(expect.objectContaining({
+      dealId: 'd-1',
+      body: expect.stringContaining('Error en datos del contrato'),
+    }));
+  });
+
+  test('idempotent: envelope already voided → returns without error', async () => {
+    const docusign = makeFakeDocusign({
+      getEnvelopeStatus: jest
+        .fn<DocusignAdapter['getEnvelopeStatus']>()
+        .mockResolvedValue('voided'),
+    });
+    const hubspot = makeFakeHubspot();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'Ya cancelado' })
+    ).resolves.toBeUndefined();
+
+    expect(docusign.voidEnvelope).not.toHaveBeenCalled();
+    expect(hubspot.updateDealProperties).not.toHaveBeenCalled();
+  });
+
+  test('409 ENVELOPE_ALREADY_COMPLETED when status is completed', async () => {
+    const docusign = makeFakeDocusign({
+      getEnvelopeStatus: jest
+        .fn<DocusignAdapter['getEnvelopeStatus']>()
+        .mockResolvedValue('completed'),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'Quiero cancelar' })
+    ).rejects.toMatchObject({ code: 'ENVELOPE_ALREADY_COMPLETED', httpStatus: 409 });
+  });
+
+  test('409 ENVELOPE_ALREADY_COMPLETED when status is declined', async () => {
+    const docusign = makeFakeDocusign({
+      getEnvelopeStatus: jest
+        .fn<DocusignAdapter['getEnvelopeStatus']>()
+        .mockResolvedValue('declined'),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'Quiero cancelar' })
+    ).rejects.toMatchObject({ code: 'ENVELOPE_ALREADY_COMPLETED', httpStatus: 409 });
+  });
+
+  test('422 VOID_REASON_REQUIRED when reason is too short', async () => {
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'ab' })
+    ).rejects.toMatchObject({ code: 'VOID_REASON_REQUIRED', httpStatus: 422 });
   });
 });

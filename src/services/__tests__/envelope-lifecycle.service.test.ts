@@ -21,6 +21,7 @@ function makeFakeDeps(overrides?: Partial<EnvelopeLifecycleDeps>): EnvelopeLifec
       getDealCapex: jest.fn<HubSpotAdapter['getDealCapex']>().mockResolvedValue([]),
       getCompanyDirecciones: jest.fn<HubSpotAdapter['getCompanyDirecciones']>().mockResolvedValue([]),
       getDealLatestQuote: jest.fn<HubSpotAdapter['getDealLatestQuote']>().mockResolvedValue({ id: '', hsQuoteLink: '' }),
+      getDealProperties: jest.fn<HubSpotAdapter['getDealProperties']>().mockResolvedValue({}),
     },
     hubspotFiles: {
       uploadFile: jest.fn<HubSpotFilesAdapter['uploadFile']>().mockResolvedValue({ fileId: 'f-1', url: 'https://files.hubspot.com/f-1' }),
@@ -30,6 +31,8 @@ function makeFakeDeps(overrides?: Partial<EnvelopeLifecycleDeps>): EnvelopeLifec
       listTemplates: jest.fn<DocusignAdapter['listTemplates']>().mockResolvedValue([]),
       sendEnvelopeFromTemplate: jest.fn<DocusignAdapter['sendEnvelopeFromTemplate']>().mockResolvedValue({ envelopeId: '', status: '' }),
       downloadCombinedDocument: jest.fn<DocusignAdapter['downloadCombinedDocument']>().mockResolvedValue(Buffer.from('pdf')),
+      getEnvelopeStatus: jest.fn<DocusignAdapter['getEnvelopeStatus']>().mockResolvedValue('sent'),
+      voidEnvelope: jest.fn<DocusignAdapter['voidEnvelope']>().mockResolvedValue(undefined),
     },
     ...overrides,
   };

@@ -1,6 +1,7 @@
 import {
   NotFoundError,
   ValidationError,
+  ConflictError,
 } from '../lib/errors/index.js';
 import type {
   Contact,
@@ -28,8 +29,15 @@ export interface SendFromTemplateResult {
   recipientEmail: string;
 }
 
+export interface VoidEnvelopeInput {
+  envelopeId: string;
+  dealId: string;
+  reason: string;
+}
+
 export interface EnvelopesService {
   sendFromTemplate(input: SendFromTemplateInput): Promise<SendFromTemplateResult>;
+  voidEnvelope(input: VoidEnvelopeInput): Promise<void>;
 }
 
 export interface EnvelopesServiceDeps {
@@ -235,6 +243,41 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         status,
         recipientEmail: proveedor.email,
       };
+    },
+
+    async voidEnvelope(input: VoidEnvelopeInput): Promise<void> {
+      const trimmed = input.reason?.trim() ?? '';
+      if (trimmed.length < 5) {
+        throw new ValidationError(
+          'VOID_REASON_REQUIRED',
+          'La razón de cancelación debe tener al menos 5 caracteres',
+          { reason: input.reason }
+        );
+      }
+
+      const currentStatus = await deps.docusign.getEnvelopeStatus(input.envelopeId);
+
+      if (currentStatus === 'voided') return;
+
+      const terminals = ['completed', 'declined'];
+      if (terminals.includes(currentStatus)) {
+        throw new ConflictError(
+          'ENVELOPE_ALREADY_COMPLETED',
+          `El contrato ya cambió a estado "${currentStatus}". Refresca la página.`,
+          { envelopeId: input.envelopeId, currentStatus }
+        );
+      }
+
+      await deps.docusign.voidEnvelope(input.envelopeId, trimmed);
+
+      await deps.hubspot.updateDealProperties(input.dealId, {
+        docusign_latest_status: 'voided',
+      });
+
+      await deps.hubspot.createNoteForDeal({
+        dealId: input.dealId,
+        body: `<p>Contrato cancelado por el vendedor. Razón: ${trimmed}</p>`,
+      });
     },
   };
 }

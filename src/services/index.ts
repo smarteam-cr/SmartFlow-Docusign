@@ -9,6 +9,7 @@ export type {
   EnvelopesServiceDeps,
   SendFromTemplateInput,
   SendFromTemplateResult,
+  VoidEnvelopeInput,
 } from './envelopes.service.js';
 export { createEnvelopesService } from './envelopes.service.js';
 

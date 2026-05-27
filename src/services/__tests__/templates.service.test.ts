@@ -15,6 +15,12 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
     downloadCombinedDocument: jest
       .fn<DocusignAdapter['downloadCombinedDocument']>()
       .mockResolvedValue(Buffer.from('pdf')),
+    getEnvelopeStatus: jest
+      .fn<DocusignAdapter['getEnvelopeStatus']>()
+      .mockResolvedValue('sent'),
+    voidEnvelope: jest
+      .fn<DocusignAdapter['voidEnvelope']>()
+      .mockResolvedValue(undefined),
     ...overrides,
   };
 }
