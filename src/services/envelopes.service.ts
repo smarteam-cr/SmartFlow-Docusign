@@ -110,6 +110,16 @@ function assertUniqueRecipientEmails(emails: Array<{ role: string; email: string
 export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesService {
   return {
     async sendFromTemplate(input: SendFromTemplateInput): Promise<SendFromTemplateResult> {
+      const dealProps = await deps.hubspot.getDealProperties(input.dealId, ['docusign_latest_status']);
+      const currentStatus = dealProps.docusign_latest_status ?? '';
+      if (currentStatus === 'sent' || currentStatus === 'signing') {
+        throw new ConflictError(
+          'ACTIVE_ENVELOPE_EXISTS',
+          `Hay un contrato activo (estado: ${currentStatus}). Cancélalo o espera a que se complete.`,
+          { dealId: input.dealId, currentStatus }
+        );
+      }
+
       const contacts = await deps.hubspot.getDealContacts(input.dealId);
       if (contacts.length === 0) {
         throw new NotFoundError(

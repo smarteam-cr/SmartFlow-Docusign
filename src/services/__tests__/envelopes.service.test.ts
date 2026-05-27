@@ -799,3 +799,95 @@ describe('envelopes.service — voidEnvelope', () => {
     ).rejects.toMatchObject({ code: 'VOID_REASON_REQUIRED', httpStatus: 422 });
   });
 });
+
+describe('envelopes.service — 409 stale check on sendFromTemplate', () => {
+  test('409 ACTIVE_ENVELOPE_EXISTS when docusign_latest_status is sent', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealProperties: jest
+        .fn<HubSpotAdapter['getDealProperties']>()
+        .mockResolvedValue({ docusign_latest_status: 'sent' }),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'ACTIVE_ENVELOPE_EXISTS', httpStatus: 409 });
+
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('409 ACTIVE_ENVELOPE_EXISTS when docusign_latest_status is signing', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealProperties: jest
+        .fn<HubSpotAdapter['getDealProperties']>()
+        .mockResolvedValue({ docusign_latest_status: 'signing' }),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'ACTIVE_ENVELOPE_EXISTS', httpStatus: 409 });
+  });
+
+  test('allows send when docusign_latest_status is signed (terminal)', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealProperties: jest
+        .fn<HubSpotAdapter['getDealProperties']>()
+        .mockResolvedValue({ docusign_latest_status: 'signed' }),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    const result = await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    expect(result.envelopeId).toBe('env-123');
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  test('allows send when docusign_latest_status is empty (no prior envelope)', async () => {
+    const hubspot = makeFakeHubspot({
+      getDealProperties: jest
+        .fn<HubSpotAdapter['getDealProperties']>()
+        .mockResolvedValue({ docusign_latest_status: '' }),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    const result = await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    expect(result.envelopeId).toBe('env-123');
+  });
+});
