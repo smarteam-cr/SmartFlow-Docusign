@@ -133,6 +133,8 @@ export interface HubSpotAdapter {
    */
   getDealLatestQuote(dealId: string): Promise<Quote>;
 
+  getDealProperties(dealId: string, properties: string[]): Promise<Record<string, string>>;
+
   updateDealProperties(dealId: string, properties: Record<string, string>): Promise<void>;
 
   createNoteForDeal(params: {
@@ -571,6 +573,37 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         }
       }
       return [...ids];
+    },
+
+    async getDealProperties(dealId: string, properties: string[]): Promise<Record<string, string>> {
+      const query = properties.map((p) => encodeURIComponent(p)).join('&properties=');
+      const url = `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}?properties=${query}`;
+      const res = await hubspotFetch(url);
+
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'DEAL_NOT_FOUND',
+          `Deal ${dealId} no existe en HubSpot`,
+          { dealId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al leer properties del Deal ${dealId}`,
+          { dealId, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        properties?: Record<string, string | null | undefined>;
+      };
+
+      const result: Record<string, string> = {};
+      for (const prop of properties) {
+        result[prop] = body.properties?.[prop]?.trim() ?? '';
+      }
+      return result;
     },
 
     async updateDealProperties(dealId: string, properties: Record<string, string>): Promise<void> {
