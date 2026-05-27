@@ -172,3 +172,52 @@ describe('DocusignAdapter.sendEnvelopeFromTemplate', () => {
     });
   });
 });
+
+describe('DocusignAdapter.getEnvelopeStatus', () => {
+  test('returns status string from DocuSign', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ status: 'sent' }),
+      } as Response)
+    );
+
+    const result = await adapter.getEnvelopeStatus('env-abc');
+    expect(result).toBe('sent');
+
+    const [url] = (global.fetch as jest.Mock).mock.calls[0] as [string];
+    expect(url).toContain('/envelopes/env-abc');
+    expect(url).not.toContain('/documents');
+  });
+
+  test('throws ENVELOPE_NOT_FOUND_IN_DOCUSIGN on 404', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('not found'),
+      } as Response)
+    );
+
+    await expect(adapter.getEnvelopeStatus('env-ghost')).rejects.toMatchObject({
+      code: 'ENVELOPE_NOT_FOUND_IN_DOCUSIGN',
+      httpStatus: 404,
+    });
+  });
+
+  test('throws DOCUSIGN_UNAVAILABLE on 500', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve('error'),
+      } as Response)
+    );
+
+    await expect(adapter.getEnvelopeStatus('env-err')).rejects.toMatchObject({
+      code: 'DOCUSIGN_UNAVAILABLE',
+      httpStatus: 502,
+    });
+  });
+});

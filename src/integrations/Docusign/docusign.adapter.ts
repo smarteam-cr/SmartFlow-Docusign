@@ -1,4 +1,4 @@
-import { ExternalServiceError } from '../../lib/errors/index.js';
+import { ExternalServiceError, NotFoundError } from '../../lib/errors/index.js';
 import { createJwtAuthClient, type JwtAuthClient } from './docusign.auth.js';
 
 const DOCUSIGN_TIMEOUT_MS = 15_000;
@@ -31,6 +31,7 @@ export interface DocusignAdapter {
   listTemplates(): Promise<TemplateSummary[]>;
   sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult>;
   downloadCombinedDocument(envelopeId: string): Promise<Buffer>;
+  getEnvelopeStatus(envelopeId: string): Promise<string>;
 }
 
 export interface DocusignAdapterConfig {
@@ -189,6 +190,29 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
         );
       }
       return Buffer.from(await res.arrayBuffer());
+    },
+
+    async getEnvelopeStatus(envelopeId: string): Promise<string> {
+      const url = `${accountUrl}/envelopes/${encodeURIComponent(envelopeId)}`;
+      const res = await docusignFetch(url, { method: 'GET' });
+
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'ENVELOPE_NOT_FOUND_IN_DOCUSIGN',
+          `El envelope ${envelopeId} no existe en DocuSign`,
+          { envelopeId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_UNAVAILABLE',
+          `DocuSign respondió ${res.status} al consultar estado del envelope ${envelopeId}`,
+          { envelopeId, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as { status?: string };
+      return body.status ?? '';
     },
   };
 }
