@@ -785,19 +785,6 @@ describe('envelopes.service — voidEnvelope', () => {
     ).rejects.toMatchObject({ code: 'ENVELOPE_ALREADY_COMPLETED', httpStatus: 409 });
   });
 
-  test('422 VOID_REASON_REQUIRED when reason is too short', async () => {
-    const service = createEnvelopesService({
-      hubspot: makeFakeHubspot(),
-      docusign: makeFakeDocusign(),
-      templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
-      portalId: 'portal-1',
-    });
-
-    await expect(
-      service.voidEnvelope({ envelopeId: 'env-1', dealId: 'd-1', reason: 'ab' })
-    ).rejects.toMatchObject({ code: 'VOID_REASON_REQUIRED', httpStatus: 422 });
-  });
 });
 
 describe('envelopes.service — 409 stale check on sendFromTemplate', () => {

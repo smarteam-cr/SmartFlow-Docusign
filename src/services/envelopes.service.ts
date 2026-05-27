@@ -256,15 +256,6 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
     },
 
     async voidEnvelope(input: VoidEnvelopeInput): Promise<void> {
-      const trimmed = input.reason?.trim() ?? '';
-      if (trimmed.length < 5) {
-        throw new ValidationError(
-          'VOID_REASON_REQUIRED',
-          'La razón de cancelación debe tener al menos 5 caracteres',
-          { reason: input.reason }
-        );
-      }
-
       const currentStatus = await deps.docusign.getEnvelopeStatus(input.envelopeId);
 
       if (currentStatus === 'voided') return;
@@ -278,7 +269,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      await deps.docusign.voidEnvelope(input.envelopeId, trimmed);
+      await deps.docusign.voidEnvelope(input.envelopeId, input.reason);
 
       await deps.hubspot.updateDealProperties(input.dealId, {
         docusign_latest_status: 'voided',
@@ -286,7 +277,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
 
       await deps.hubspot.createNoteForDeal({
         dealId: input.dealId,
-        body: `<p>Contrato cancelado por el vendedor. Razón: ${trimmed}</p>`,
+        body: `<p>Contrato cancelado por el vendedor. Razón: ${input.reason}</p>`,
       });
     },
   };

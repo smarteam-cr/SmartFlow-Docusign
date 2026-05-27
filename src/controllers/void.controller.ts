@@ -4,7 +4,7 @@ import type { EnvelopesService } from '../services/index.js';
 
 export const voidEnvelopeBodySchema = z.object({
   dealId: z.string().min(1).regex(/^[0-9]+$/, 'dealId debe ser numérico'),
-  reason: z.string().min(5, 'La razón debe tener al menos 5 caracteres'),
+  reason: z.string().trim().min(5, 'La razón debe tener al menos 5 caracteres'),
 });
 
 export const voidEnvelopeParamsSchema = z.object({
