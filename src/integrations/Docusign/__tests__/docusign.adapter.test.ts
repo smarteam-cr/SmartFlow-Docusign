@@ -221,3 +221,53 @@ describe('DocusignAdapter.getEnvelopeStatus', () => {
     });
   });
 });
+
+describe('DocusignAdapter.voidEnvelope', () => {
+  test('sends PUT with voided status and reason', async () => {
+    const captured: Array<{ url: string; init: RequestInit }> = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url, init) => {
+      captured.push({ url: url as string, init: init as RequestInit });
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({}),
+      } as Response);
+    });
+
+    await adapter.voidEnvelope('env-abc', 'Cliente cambió de opinión');
+
+    expect(captured[0]!.url).toContain('/envelopes/env-abc');
+    expect(captured[0]!.init.method).toBe('PUT');
+    const body = JSON.parse(captured[0]!.init.body as string);
+    expect(body).toEqual({ status: 'voided', voidedReason: 'Cliente cambió de opinión' });
+  });
+
+  test('throws ENVELOPE_NOT_FOUND_IN_DOCUSIGN on 404', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve('not found'),
+      } as Response)
+    );
+
+    await expect(adapter.voidEnvelope('env-ghost', 'razón')).rejects.toMatchObject({
+      code: 'ENVELOPE_NOT_FOUND_IN_DOCUSIGN',
+      httpStatus: 404,
+    });
+  });
+
+  test('throws DOCUSIGN_VOID_REJECTED on 400', async () => {
+    jest.spyOn(global, 'fetch').mockImplementation(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        text: () => Promise.resolve('bad request'),
+      } as Response)
+    );
+
+    await expect(adapter.voidEnvelope('env-bad', 'razón')).rejects.toMatchObject({
+      code: 'DOCUSIGN_VOID_REJECTED',
+    });
+  });
+});

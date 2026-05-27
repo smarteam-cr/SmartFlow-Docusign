@@ -32,6 +32,7 @@ export interface DocusignAdapter {
   sendEnvelopeFromTemplate(input: SendEnvelopeInput): Promise<SendEnvelopeResult>;
   downloadCombinedDocument(envelopeId: string): Promise<Buffer>;
   getEnvelopeStatus(envelopeId: string): Promise<string>;
+  voidEnvelope(envelopeId: string, reason: string): Promise<void>;
 }
 
 export interface DocusignAdapterConfig {
@@ -213,6 +214,29 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
 
       const body = (await res.json()) as { status?: string };
       return body.status ?? '';
+    },
+
+    async voidEnvelope(envelopeId: string, reason: string): Promise<void> {
+      const url = `${accountUrl}/envelopes/${encodeURIComponent(envelopeId)}`;
+      const res = await docusignFetch(url, {
+        method: 'PUT',
+        jsonBody: { status: 'voided', voidedReason: reason },
+      });
+
+      if (res.status === 404) {
+        throw new NotFoundError(
+          'ENVELOPE_NOT_FOUND_IN_DOCUSIGN',
+          `El envelope ${envelopeId} no existe en DocuSign`,
+          { envelopeId }
+        );
+      }
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'DOCUSIGN_VOID_REJECTED',
+          `DocuSign rechazó la cancelación del envelope ${envelopeId} (HTTP ${res.status})`,
+          { envelopeId, status: res.status }
+        );
+      }
     },
   };
 }
