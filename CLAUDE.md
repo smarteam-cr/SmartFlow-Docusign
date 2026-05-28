@@ -191,12 +191,10 @@ Uso: `request.log.info({ dealId, envelopeId }, 'envelope sent')`. El primer argu
 
 ## Testing
 
-- **Solo tests unitarios de services** en `src/services/__tests__/` (~6 tests para la demo).
+- **154 tests unitarios** en 17 test suites. Cubren: services, controllers, adapters (HubSpot, DocuSign, Files), y lib (HMAC, tenant config, template mapping/roles).
 - Adapters falsos pasados por DI (esa es la razón por la que existe DI suave).
-- **Sin nock/msw, sin smoke E2E** en demo (Roadmap §15.7).
+- **Sin nock/msw, sin smoke E2E automatizado** (Roadmap §16.10). Smoke tests manuales con curls validados.
 - Type checking obligatorio: `npm run typecheck` antes de commit.
-
-Tests deben correr en <2 segundos. Si toma más, hay algo mal.
 
 ---
 
@@ -218,22 +216,34 @@ DOCUSIGN_IMPERSONATED_USER_ID=
 DOCUSIGN_PRIVATE_KEY=
 DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_BASE_PATH=https://demo.docusign.net
+
+# Mapa templateId → hubspot contactId del Proveedor (JSON)
+TEMPLATE_PROVEEDOR_MAP={}
+
+# DocuSign Connect webhook HMAC secret (generado por DocuSign Admin → Connect → Gestionar claves)
+DOCUSIGN_CONNECT_HMAC_SECRET=
+
+# HubSpot Portal ID (visible en la URL de HubSpot: app.hubspot.com/contacts/{portalId}/...)
+HUBSPOT_PORTAL_ID=
 ```
 
-Setup paso a paso de cuentas externas en spec §14.
+Setup paso a paso de cuentas externas en spec §14 y §17.
 
 ---
 
 ## Endpoints expuestos
 
-| Method | Path                                        | Qué hace |
+| Method | Path | Qué hace |
 |---|---|---|
-| `GET`  | `/api/v1/docusign/templates`              | Lista templates DocuSign disponibles |
-| `GET`  | `/api/v1/hubspot/deals/:dealId/contacts`  | Lista contactos asociados al Deal (solo los que tienen email) |
-| `POST` | `/api/v1/docusign/envelopes`              | Body `{ dealId, templateId, contactId }` → envía envelope al contacto elegido |
-| `GET`  | `/health`                                  | `{ status, uptime, version }` (sin auth) |
+| `GET` | `/api/v1/docusign/templates` | Lista templates DocuSign disponibles |
+| `GET` | `/api/v1/hubspot/deals/:dealId/contacts` | Lista contactos asociados al Deal (solo los que tienen email) |
+| `POST` | `/api/v1/docusign/envelopes` | Body `{ dealId, templateId, contactId, directionId? }` → envía envelope. 409 si hay envelope activo |
+| `POST` | `/api/v1/docusign/envelopes/:envelopeId/void` | Body `{ dealId, reason }` (reason min 5 chars) → cancela envelope activo. 409 si terminal |
+| `GET` | `/api/v1/deals/:dealId/envelope-status` | Estado del último envelope: `{ envelopeId, status, sentAt, signedAt, pdfUrl }` |
+| `POST` | `/api/v1/webhooks/docusign` | Receptor DocuSign Connect (HMAC verificado). Procesa eventos: sent, signing, completed, declined, voided |
+| `GET` | `/health` | `{ status, uptime, version }` (sin auth) |
 
-Contratos completos en spec §5.1.
+Contratos completos en spec consolidado v2 §5.1, §7.2.
 
 ---
 
