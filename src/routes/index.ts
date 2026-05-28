@@ -4,11 +4,13 @@ import type { EnvelopesController } from '../controllers/envelopes.controller.js
 import type { ContactsController } from '../controllers/contacts.controller.js';
 import type { VoidController } from '../controllers/void.controller.js';
 import type { StatusController } from '../controllers/status.controller.js';
+import type { SendContextController } from '../controllers/send-context.controller.js';
 import { templatesRoutes } from './templates.routes.js';
 import { envelopesRoutes } from './envelopes.routes.js';
 import { contactsRoutes } from './contacts.routes.js';
 import { voidRoutes } from './void.routes.js';
 import { statusRoutes } from './status.routes.js';
+import { sendContextRoutes } from './send-context.routes.js';
 
 export interface V1RoutesOptions {
   templatesController: TemplatesController;
@@ -16,6 +18,7 @@ export interface V1RoutesOptions {
   contactsController: ContactsController;
   voidController: VoidController;
   statusController: StatusController;
+  sendContextController: SendContextController;
 }
 
 export const registerV1Routes: FastifyPluginAsync<V1RoutesOptions> = async (
@@ -27,4 +30,5 @@ export const registerV1Routes: FastifyPluginAsync<V1RoutesOptions> = async (
   await fastify.register(contactsRoutes, { controller: opts.contactsController });
   await fastify.register(voidRoutes, { controller: opts.voidController });
   await fastify.register(statusRoutes, { controller: opts.statusController });
+  await fastify.register(sendContextRoutes, { controller: opts.sendContextController });
 };

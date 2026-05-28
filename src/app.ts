@@ -30,7 +30,9 @@ import { createContactsController } from './controllers/contacts.controller.js';
 import { createWebhooksController } from './controllers/webhooks.controller.js';
 import { createVoidController } from './controllers/void.controller.js';
 import { createStatusController } from './controllers/status.controller.js';
+import { createSendContextController } from './controllers/send-context.controller.js';
 import { createEnvelopeStatusService } from './services/envelope-status.service.js';
+import { createSendContextService } from './services/send-context.service.js';
 import { registerV1Routes } from './routes/index.js';
 import { registerWebhookRoutes } from './routes/webhooks.routes.js';
 import { registerErrorHandler } from './middlewares/errorHandler.js';
@@ -115,6 +117,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   });
 
   const statusService = createEnvelopeStatusService({ hubspot });
+  const sendContextService = createSendContextService({ hubspot, docusign });
 
   const templatesController = createTemplatesController(templatesService);
   const envelopesController = createEnvelopesController(envelopesService);
@@ -122,6 +125,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   const contactsController = createContactsController(contactsService);
   const voidController = createVoidController(envelopesService);
   const statusController = createStatusController(statusService);
+  const sendContextController = createSendContextController(sendContextService);
   const webhooksController = createWebhooksController({
     lifecycleService,
     hmacSecret: env.DOCUSIGN_CONNECT_HMAC_SECRET,
@@ -136,6 +140,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
         contactsController,
         voidController,
         statusController,
+        sendContextController,
       });
       await registerWebhookRoutes(instance, { webhooksController });
     },
