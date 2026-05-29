@@ -240,6 +240,7 @@ Setup paso a paso de cuentas externas en spec §14 y §17.
 | `POST` | `/api/v1/docusign/envelopes` | Body `{ dealId, templateId, contactId, directionId? }` → envía envelope. 409 si hay envelope activo |
 | `POST` | `/api/v1/docusign/envelopes/:envelopeId/void` | Body `{ dealId, reason }` (reason min 5 chars) → cancela envelope activo. 409 si terminal |
 | `GET` | `/api/v1/deals/:dealId/envelope-status` | Estado del último envelope: `{ envelopeId, status, sentAt, signedAt, pdfUrl }` |
+| `GET` | `/api/v1/deals/:dealId/send-context` | Contexto para form de envío: `{ clienteMode, juridicoContact, contacts, direcciones, templates, company, capexCount, hasQuote }` |
 | `POST` | `/api/v1/webhooks/docusign` | Receptor DocuSign Connect (HMAC verificado). Procesa eventos: sent, signing, completed, declined, voided |
 | `GET` | `/health` | `{ status, uptime, version }` (sin auth) |
 
