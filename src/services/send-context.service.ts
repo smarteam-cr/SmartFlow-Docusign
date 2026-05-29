@@ -8,6 +8,9 @@ export interface SendContextResult {
   contacts: Contact[];
   direcciones: Direccion[];
   templates: TemplateSummary[];
+  company: { razonSocial: string; pais: string } | null;
+  capexCount: number;
+  hasQuote: boolean;
 }
 
 export interface SendContextService {
@@ -17,7 +20,7 @@ export interface SendContextService {
 export interface SendContextServiceDeps {
   hubspot: Pick<
     HubSpotAdapter,
-    'getDealContacts' | 'findJuridicoContactIds' | 'getDealPrimaryCompany' | 'getContactById' | 'getCompanyDirecciones'
+    'getDealContacts' | 'findJuridicoContactIds' | 'getDealPrimaryCompany' | 'getContactById' | 'getCompanyDirecciones' | 'getDealCapex' | 'getDealLatestQuote'
   >;
   docusign: Pick<DocusignAdapter, 'listTemplates'>;
 }
@@ -27,7 +30,7 @@ export function createSendContextService(
 ): SendContextService {
   return {
     async getSendContext(dealId: string): Promise<SendContextResult> {
-      const [contacts, juridicoIds, companyResult, templates] = await Promise.all([
+      const [contacts, juridicoIds, companyResult, templates, capexResult, quoteResult] = await Promise.all([
         deps.hubspot.getDealContacts(dealId),
         deps.hubspot.findJuridicoContactIds(dealId),
         deps.hubspot
@@ -39,6 +42,23 @@ export function createSendContextService(
             throw err;
           }),
         deps.docusign.listTemplates(),
+        deps.hubspot
+          .getDealCapex(dealId)
+          .catch((err: unknown) => {
+            if (err instanceof AppError && err.code === 'CAPEX_TOO_MANY') {
+              return [] as const;
+            }
+            throw err;
+          }),
+        deps.hubspot
+          .getDealLatestQuote(dealId)
+          .then(() => true as const)
+          .catch((err: unknown) => {
+            if (err instanceof AppError && err.code === 'QUOTE_NOT_FOUND') {
+              return false as const;
+            }
+            throw err;
+          }),
       ]);
 
       let clienteMode: SendContextResult['clienteMode'];
@@ -58,7 +78,13 @@ export function createSendContextService(
         direcciones = await deps.hubspot.getCompanyDirecciones(companyResult.id);
       }
 
-      return { clienteMode, juridicoContact, contacts, direcciones, templates };
+      const company = companyResult
+        ? { razonSocial: companyResult.razonSocial, pais: companyResult.pais }
+        : null;
+      const capexCount = capexResult.length;
+      const hasQuote = quoteResult === true;
+
+      return { clienteMode, juridicoContact, contacts, direcciones, templates, company, capexCount, hasQuote };
     },
   };
 }
