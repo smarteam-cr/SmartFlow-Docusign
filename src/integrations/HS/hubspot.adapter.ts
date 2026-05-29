@@ -566,7 +566,10 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       const ids = new Set<string>();
       for (const r of body.results ?? []) {
         const hasJuridico = (r.associationTypes ?? []).some(
-          (t) => t.label === 'responsable_jurídico'
+          (t) => {
+            const normalized = (t.label ?? '').toLowerCase().replace(/[\s_]+/g, '_');
+            return normalized === 'responsable_jurídico';
+          }
         );
         if (hasJuridico && r.toObjectId !== undefined && r.toObjectId !== null) {
           ids.add(String(r.toObjectId));

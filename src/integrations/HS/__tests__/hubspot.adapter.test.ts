@@ -218,6 +218,23 @@ describe('HubSpotAdapter.findJuridicoContactIds', () => {
     expect(ids).toEqual(['c-1']);
   });
 
+  test('detecta label con formato display "Responsable Jurídico" (v4 real)', async () => {
+    mockFetchSequence([{
+      status: 200,
+      body: {
+        results: [{
+          toObjectId: 221686555018,
+          associationTypes: [
+            { category: 'USER_DEFINED', typeId: 138, label: 'Responsable Jurídico' },
+            { category: 'HUBSPOT_DEFINED', typeId: 3, label: null },
+          ],
+        }],
+      },
+    }]);
+    const ids = await adapter.findJuridicoContactIds('d-1');
+    expect(ids).toEqual(['221686555018']);
+  });
+
   test('lanza DEAL_NOT_FOUND con 404', async () => {
     mockFetchSequence([{ status: 404, body: {} }]);
     await expect(adapter.findJuridicoContactIds('d-ghost')).rejects.toMatchObject({
