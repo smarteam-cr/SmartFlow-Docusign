@@ -14,6 +14,7 @@ const CONTACT_A: Contact = {
   lastName: 'López',
   email: 'ana@example.com',
   docIdentificacion: '12345',
+  pais: '',
 };
 
 const CONTACT_B: Contact = {
@@ -22,6 +23,7 @@ const CONTACT_B: Contact = {
   lastName: 'García',
   email: 'bruno@example.com',
   docIdentificacion: '67890',
+  pais: '',
 };
 
 const TEMPLATE: TemplateSummary = { id: 'tpl-1', name: 'Contrato' };
@@ -30,7 +32,7 @@ const DIRECCION: Direccion = { id: 'dir-1', direction: 'Calle Mayor 10' };
 
 const CAPEX_A: Capex = {
   id: 'capex-1',
-  qrCapex: 'QR001',
+  codigo_qr: 'QR001',
   nombre: 'Capex Uno',
   cantidad: '2',
   costoNeto: '1000',
@@ -39,7 +41,7 @@ const CAPEX_A: Capex = {
 
 const CAPEX_B: Capex = {
   id: 'capex-2',
-  qrCapex: 'QR002',
+  codigo_qr: 'QR002',
   nombre: 'Capex Dos',
   cantidad: '3',
   costoNeto: '2000',

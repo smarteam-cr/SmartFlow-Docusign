@@ -3,7 +3,7 @@ import { createEnvTenantConfigProvider } from '../EnvTenantConfigProvider.js';
 import type { Env } from '../../../config/env.js';
 
 const sampleEnv: Env = {
-  PORT: 3000,
+  PORT: 3002,
   NODE_ENV: 'development',
   HUBSPOT_ACCESS_TOKEN: 'pat-na1-token',
   DOCUSIGN_CLIENT_ID: 'client-id',

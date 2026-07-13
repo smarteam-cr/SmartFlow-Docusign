@@ -8,10 +8,10 @@ const HUBSPOT_BASE_URL = 'https://api.hubapi.com';
 const HUBSPOT_TIMEOUT_MS = 10_000;
 
 /**
- * Hard limit on capex per Deal. Mirrors the template DocuSign which has 6
+ * Hard limit on capex per Deal. Mirrors the template DocuSign which has 5
  * fixed rows. Beyond this the data can't be rendered, so the adapter blocks.
  */
-export const MAX_CAPEX_PER_DEAL = 6;
+export const MAX_CAPEX_PER_DEAL = 5;
 
 export interface Contact {
   id: string;
@@ -19,6 +19,8 @@ export interface Contact {
   lastName: string;
   email: string;
   docIdentificacion: string;
+  /** País de origen (propiedad estándar country de HubSpot). */
+  pais: string;
 }
 
 export interface Company {
@@ -35,7 +37,7 @@ export interface DealOwner {
 
 export interface Capex {
   id: string;
-  qrCapex: string;
+  codigo_qr: string;
   nombre: string;
   cantidad: string;
   costoNeto: string;
@@ -245,7 +247,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       const results = await batchReadObjects(
         'contacts',
         ids,
-        ['firstname', 'lastname', 'email', 'doc_identificacion'],
+        ['firstname', 'lastname', 'email', 'doc_identificacion', 'country'],
         { dealId }
       );
 
@@ -256,6 +258,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
           lastName: r.properties?.lastname?.trim() ?? '',
           email: r.properties?.email?.trim() ?? '',
           docIdentificacion: r.properties?.doc_identificacion?.trim() ?? '',
+          pais: r.properties?.country?.trim() ?? '',
         }))
         .filter((c) => c.id !== '' && c.email !== '');
     },
@@ -403,7 +406,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     async getContactById(contactId: string): Promise<Contact> {
       const url =
         `${HUBSPOT_BASE_URL}/crm/v3/objects/contacts/${encodeURIComponent(contactId)}` +
-        `?properties=firstname,lastname,email,doc_identificacion`;
+        `?properties=firstname,lastname,email,doc_identificacion,country`;
       const res = await hubspotFetch(url);
 
       if (res.status === 404) {
@@ -428,6 +431,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
           lastname?: string;
           email?: string;
           doc_identificacion?: string;
+          country?: string;
         };
       };
 
@@ -437,6 +441,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         lastName: body.properties?.lastname?.trim() ?? '',
         email: body.properties?.email?.trim() ?? '',
         docIdentificacion: body.properties?.doc_identificacion?.trim() ?? '',
+        pais: body.properties?.country?.trim() ?? '',
       };
     },
 
@@ -455,14 +460,14 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       const results = await batchReadObjects(
         '2-58142466',
         ids,
-        ['qr_capex', 'nombre', 'cantidad', 'costo_neto', 'hs_createdate'],
+        ['codigo_qr', 'nombre', 'cantidad', 'costo_neto', 'hs_createdate'],
         { dealId }
       );
 
       return results
         .map((r) => ({
           id: r.id ?? '',
-          qrCapex: r.properties?.qr_capex?.trim() ?? '',
+          codigo_qr: r.properties?.codigo_qr?.trim() ?? '',
           nombre: r.properties?.nombre?.trim() ?? '',
           cantidad: r.properties?.cantidad?.trim() ?? '',
           costoNeto: r.properties?.costo_neto?.trim() ?? '',

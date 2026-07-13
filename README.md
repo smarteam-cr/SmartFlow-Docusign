@@ -51,7 +51,7 @@ Copia `.env.example` a `.env` y rellena los valores (las credenciales **no** se 
 
 | Variable | Para qué sirve |
 |---|---|
-| `PORT` | Puerto del server (default 3000) |
+| `PORT` | Puerto del server (default 3002) |
 | `NODE_ENV` | `development` \| `test` \| `production` |
 | `HUBSPOT_ACCESS_TOKEN` | Token de la Private App de HubSpot |
 | `HUBSPOT_PORTAL_ID` | ID del portal (para URLs de PDF y correlación del webhook) |

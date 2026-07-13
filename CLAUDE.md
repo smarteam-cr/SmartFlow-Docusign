@@ -103,7 +103,7 @@ export function createHubSpotAdapter(config: { accessToken: string }) {
     async getDealPrimaryCompany(dealId: string): Promise<Company> { /* v4 assoc filtered by Primary label */ },
     async getDealOwner(dealId: string): Promise<DealOwner> { /* deal.hubspot_owner_id + /crm/v3/owners/{id} */ },
     async findJuridicoContactIds(dealId: string): Promise<string[]> { /* v4 assoc filtered by USER_DEFINED label */ },
-    async getDealCapex(dealId: string): Promise<Capex[]> { /* v4 assoc + batch-read; throws if >6 */ },
+    async getDealCapex(dealId: string): Promise<Capex[]> { /* v4 assoc + batch-read; throws if >5 */ },
     async getCompanyDirecciones(companyId: string): Promise<Direccion[]> { /* v4 assoc + batch-read */ },
     async getDealLatestQuote(dealId: string): Promise<Quote> { /* v4 assoc + batch-read; latest by hs_createdate */ },
   };
@@ -217,8 +217,9 @@ DOCUSIGN_PRIVATE_KEY=
 DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_BASE_PATH=https://demo.docusign.net
 
-# Mapa templateId → hubspot contactId del Proveedor (JSON)
-TEMPLATE_PROVEEDOR_MAP={}
+# Config de proveedores por template (array JSON):
+# [{"id":"<template-uuid>","country":"<país proveedor / tab countryINVE>","legalRepresentativeCode":"<hs-contact-id>"}]
+TEMPLATE_PROVEEDOR_MAP=[]
 
 # DocuSign Connect webhook HMAC secret (generado por DocuSign Admin → Connect → Gestionar claves)
 DOCUSIGN_CONNECT_HMAC_SECRET=

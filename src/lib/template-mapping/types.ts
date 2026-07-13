@@ -1,6 +1,6 @@
 /**
  * Resolution context handed to the resolver to compute prefill values for the
- * Propietario role tabs. All IO happens upstream in the service — the resolver
+ * Proveedor role tabs. All IO happens upstream in the service — the resolver
  * is sync and pure.
  */
 export interface ResolutionCompany {
@@ -9,20 +9,19 @@ export interface ResolutionCompany {
 }
 
 export interface ResolutionContactoLegal {
-  firstName: string;
-  lastName: string;
-  docIdentificacion: string;
+  /** Nombre completo del representante legal (HubSpot o request body). */
+  fullName: string;
+  /** DNI del representante legal (HubSpot o request body). */
+  dni: string;
+  /** País de origen del cliente (propiedad country del contacto HubSpot). */
+  pais: string;
 }
 
 export interface ResolutionCapex {
-  qrCapex: string;
+  codigo_qr: string;
   nombre: string;
   cantidad: string;
   costoNeto: string;
-}
-
-export interface ResolutionDireccion {
-  direction: string;
 }
 
 export interface ResolutionQuote {
@@ -33,14 +32,19 @@ export interface ResolutionContext {
   templateId: string;
   company: ResolutionCompany;
   contactoLegal: ResolutionContactoLegal;
+  /** País del proveedor según TEMPLATE_PROVEEDOR_MAP (tab countryINVE). */
+  proveedorCountry: string;
+  /** Ubicación del cliente, viene tal cual del request body. */
+  location: string;
+  /** Fecha de envío en formato YYYY/MM/DD (tab datetime del template). */
+  sentDate: string;
   capex: ResolutionCapex[];
-  direccion: ResolutionDireccion | null;
   quote: ResolutionQuote;
 }
 
 /**
  * Port: returns the dictionary { tabLabel: value } that the DocuSign adapter
- * will inject as textTabs on the Propietario role.
+ * will inject as textTabs on the Proveedor role.
  *
  * Synchronous: all IO happens in the envelope service. The resolver is pure.
  *

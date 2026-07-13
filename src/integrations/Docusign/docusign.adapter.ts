@@ -1,5 +1,9 @@
 import { ExternalServiceError, NotFoundError } from '../../lib/errors/index.js';
-import { createJwtAuthClient, type JwtAuthClient } from './docusign.auth.js';
+import {
+  createJwtAuthClient,
+  resolveDocusignOAuthHost,
+  type JwtAuthClient,
+} from './docusign.auth.js';
 
 const DOCUSIGN_TIMEOUT_MS = 15_000;
 
@@ -52,6 +56,7 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
       clientId: config.clientId,
       userId: config.userId,
       privateKey: config.privateKey,
+      oauthHost: resolveDocusignOAuthHost(config.basePath),
     });
 
   const accountUrl = `${config.basePath}/restapi/v2.1/accounts/${encodeURIComponent(config.accountId)}`;
@@ -146,7 +151,7 @@ export function createDocusignAdapter(config: DocusignAdapterConfig): DocusignAd
                 textCustomFields: Object.entries(input.customFields).map(([name, value]) => ({
                   name,
                   value,
-                  show: 'false',
+                  show: 'true',
                   required: 'false',
                 })),
               },

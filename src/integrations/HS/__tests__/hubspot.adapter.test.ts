@@ -34,6 +34,7 @@ describe('HubSpotAdapter.getDealContacts', () => {
               lastname: 'Lovelace',
               email: 'ada@math.org',
               doc_identificacion: 'CC-99999',
+              country: 'Costa Rica',
             },
           }],
         },
@@ -47,6 +48,7 @@ describe('HubSpotAdapter.getDealContacts', () => {
       lastName: 'Lovelace',
       email: 'ada@math.org',
       docIdentificacion: 'CC-99999',
+      pais: 'Costa Rica',
     }]);
   });
 
@@ -130,6 +132,7 @@ describe('HubSpotAdapter.getContactById', () => {
             lastname: 'Gómez',
             email: 'maria@proveedor.co',
             doc_identificacion: 'V-12345',
+            country: 'España',
           },
         },
       },
@@ -142,6 +145,7 @@ describe('HubSpotAdapter.getContactById', () => {
       lastName: 'Gómez',
       email: 'maria@proveedor.co',
       docIdentificacion: 'V-12345',
+      pais: 'España',
     });
   });
 
@@ -293,7 +297,7 @@ describe('HubSpotAdapter.getDealCapex', () => {
       },
     ]);
     const capex = await adapter.getDealCapex('d-1');
-    expect(capex[0]?.qrCapex).toBe('');
+    expect(capex[0]?.codigo_qr).toBe('');
     expect(capex[0]?.nombre).toBe('A');
   });
 

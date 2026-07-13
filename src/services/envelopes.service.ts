@@ -21,6 +21,14 @@ export interface SendFromTemplateInput {
   templateId: string;
   contactId: string;
   directionId?: string;
+  /** Ubicación del cliente — se envía tal cual al tab location del template. */
+  location?: string;
+  /** Fallback si el contacto de HubSpot no tiene nombre/apellidos. */
+  legalRepresentative?: string;
+  /** Fallback si el contacto de HubSpot no tiene doc_identificacion. */
+  dniLegalRepresentative?: string;
+  /** Fallback si el contacto de HubSpot no tiene country (país de origen del cliente). */
+  country?: string;
 }
 
 export interface SendFromTemplateResult {
@@ -147,8 +155,8 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
 
       const owner = await deps.hubspot.getDealOwner(input.dealId);
 
-      const proveedorContactId = deps.templateRoles.getProveedorContactId(input.templateId);
-      if (!proveedorContactId) {
+      const proveedorConfig = deps.templateRoles.getProveedorConfig(input.templateId);
+      if (!proveedorConfig) {
         throw new ValidationError(
           'PROVEEDOR_NOT_CONFIGURED',
           `No hay proveedor configurado para el template ${input.templateId} (revisa TEMPLATE_PROVEEDOR_MAP)`,
@@ -156,7 +164,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      const proveedor = await deps.hubspot.getContactById(proveedorContactId);
+      const proveedor = await deps.hubspot.getContactById(proveedorConfig.contactId);
       if (!proveedor.email) {
         throw new ValidationError(
           'PROVEEDOR_EMAIL_MISSING',
@@ -174,7 +182,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       ]);
 
       const direcciones = await deps.hubspot.getCompanyDirecciones(company.id);
-      const direccion = selectDireccion(direcciones, input.directionId);
+      selectDireccion(direcciones, input.directionId);
 
       assertUniqueRecipientEmails([
         { role: 'Propietario', email: owner.email },
@@ -182,55 +190,79 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         { role: 'Cliente', email: cliente.email },
       ]);
 
+      // Representante legal: HubSpot primero, request body como fallback.
+      const legalRepresentative =
+        `${cliente.firstName} ${cliente.lastName}`.trim() ||
+        input.legalRepresentative?.trim() ||
+        '';
+      const dniLegalRepresentative =
+        cliente.docIdentificacion || input.dniLegalRepresentative?.trim() || '';
+
+      const missingLegalData = [
+        ...(legalRepresentative ? [] : ['legalRepresentative']),
+        ...(dniLegalRepresentative ? [] : ['dniLegalRepresentative']),
+      ];
+      if (missingLegalData.length > 0) {
+        throw new ValidationError(
+          'CLIENTE_LEGAL_DATA_MISSING',
+          `Faltan datos del representante legal (${missingLegalData.join(', ')}) — no vienen del contacto en HubSpot ni del request. No se puede generar el contrato.`,
+          { dealId: input.dealId, contactId: cliente.id, missing: missingLegalData }
+        );
+      }
+
       const ctx: ResolutionContext = {
         templateId: input.templateId,
         company: { razonSocial: company.razonSocial, pais: company.pais },
         contactoLegal: {
-          firstName: cliente.firstName,
-          lastName: cliente.lastName,
-          docIdentificacion: cliente.docIdentificacion,
+          fullName: legalRepresentative,
+          dni: dniLegalRepresentative,
+          pais: cliente.pais || input.country?.trim() || '',
         },
+        proveedorCountry: proveedorConfig.country,
+        location: input.location ?? '',
+        sentDate: toISODate().replace(/-/g, '/'),
         capex: capex.map((c) => ({
-          qrCapex: c.qrCapex,
+          codigo_qr: c.codigo_qr,
           nombre: c.nombre,
           cantidad: c.cantidad,
           costoNeto: c.costoNeto,
         })),
-        direccion: direccion ? { direction: direccion.direction } : null,
         quote: { hsQuoteLink: quote.hsQuoteLink },
       };
 
       const tabs = deps.templateMapping.resolveTabValues(ctx);
 
       const proveedorName = `${proveedor.firstName} ${proveedor.lastName}`.trim();
-      const clienteName = `${cliente.firstName} ${cliente.lastName}`.trim();
+      const clienteName = `${cliente.firstName} ${cliente.lastName}`.trim() || legalRepresentative;
 
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
         roles: [
-          {
+         /* {
             roleName: 'Propietario',
             name: owner.name,
             email: owner.email,
             routingOrder: 1,
             tabs,
-          },
+          },*/
           {
             roleName: 'Proveedor',
             name: proveedorName,
             email: proveedor.email,
-            routingOrder: 2,
+            routingOrder: 1,
+            // TODO: reemplazar hardcode por dato de HubSpot (company.razonSocial)
+            tabs: { ...tabs, company: 'Smarteam Test' },
           },
           {
             roleName: 'Cliente',
             name: clienteName,
             email: cliente.email,
-            routingOrder: 3,
+            routingOrder: 2,
           },
         ],
         customFields: {
           hubspot_deal_id: input.dealId,
-          hubspot_portal_id: deps.portalId,
+          hubspot_portal_id: deps.portalId
         },
       });
 

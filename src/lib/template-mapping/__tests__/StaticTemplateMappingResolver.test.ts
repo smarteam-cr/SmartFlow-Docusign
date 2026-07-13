@@ -4,7 +4,7 @@ import type { ResolutionContext, ResolutionCapex } from '../types.js';
 
 function makeCapex(label: string): ResolutionCapex {
   return {
-    qrCapex: `Q-${label}`,
+    codigo_qr: `Q-${label}`,
     nombre: `Nombre-${label}`,
     cantidad: `Cant-${label}`,
     costoNeto: `Costo-${label}`,
@@ -14,102 +14,107 @@ function makeCapex(label: string): ResolutionCapex {
 const baseCtx: ResolutionContext = {
   templateId: 'tpl-1',
   company: { razonSocial: 'SIGMA ALIMENTOS', pais: 'MX' },
-  contactoLegal: { firstName: 'Ada', lastName: 'Lovelace', docIdentificacion: 'CC-12345' },
+  contactoLegal: { fullName: 'Ada Lovelace', dni: 'CC-12345', pais: 'Costa Rica' },
+  proveedorCountry: 'España',
+  location: 'San José, Zona Franca',
+  sentDate: '2026/07/11',
   capex: [],
-  direccion: { direction: 'Calle 100 #5-30' },
   quote: { hsQuoteLink: 'https://hubspot.com/q1' },
 };
 
 describe('createStaticTemplateMappingResolver', () => {
   const resolver = createStaticTemplateMappingResolver();
 
-  test('emite las 31 keys esperadas (7 fijas + 24 capex)', () => {
+  test('emite las 27 keys esperadas (7 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
-      '#HREF_UrlCotizacion',
-      'ApellidosCliente',
-      'CantidadCpx1', 'CantidadCpx2', 'CantidadCpx3', 'CantidadCpx4', 'CantidadCpx5', 'CantidadCpx6',
-      'CostoCpx1', 'CostoCpx2', 'CostoCpx3', 'CostoCpx4', 'CostoCpx5', 'CostoCpx6',
-      'DirecUbiComodato',
-      'DocIdentCliente',
-      'NombreCliente',
-      'NombreCpx1', 'NombreCpx2', 'NombreCpx3', 'NombreCpx4', 'NombreCpx5', 'NombreCpx6',
-      'PaisRazonSocial',
-      'QrCpx1', 'QrCpx2', 'QrCpx3', 'QrCpx4', 'QrCpx5', 'QrCpx6',
-      'RazonSocial',
+      'codeQR_1', 'codeQR_2', 'codeQR_3', 'codeQR_4', 'codeQR_5',
+      'country',
+      'countryINVE',
+      'datetime',
+      'descriptionCapex_1', 'descriptionCapex_2', 'descriptionCapex_3', 'descriptionCapex_4', 'descriptionCapex_5',
+      'dniLegalRepresentative',
+      'legalRepresentative',
+      'location',
+      'price_1', 'price_2', 'price_3', 'price_4', 'price_5',
+      'quantity_1', 'quantity_2', 'quantity_3', 'quantity_4', 'quantity_5',
+      'urlQuotation',
     ].sort());
   });
 
-  test('mapea Company a RazonSocial y PaisRazonSocial', () => {
+  test('mapea contactoLegal a legalRepresentative / dniLegalRepresentative / country', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r.RazonSocial).toBe('SIGMA ALIMENTOS');
-    expect(r.PaisRazonSocial).toBe('MX');
+    expect(r.legalRepresentative).toBe('Ada Lovelace');
+    expect(r.dniLegalRepresentative).toBe('CC-12345');
+    expect(r.country).toBe('Costa Rica');
   });
 
-  test('mapea contactoLegal a NombreCliente / ApellidosCliente / DocIdentCliente', () => {
+  test('mapea proveedorCountry a countryINVE', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r.NombreCliente).toBe('Ada');
-    expect(r.ApellidosCliente).toBe('Lovelace');
-    expect(r.DocIdentCliente).toBe('CC-12345');
+    expect(r.countryINVE).toBe('España');
   });
 
-  test('mapea direccion a DirecUbiComodato', () => {
+  test('mapea location tal cual', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r.DirecUbiComodato).toBe('Calle 100 #5-30');
+    expect(r.location).toBe('San José, Zona Franca');
   });
 
-  test('mapea quote a #HREF_UrlCotizacion', () => {
+  test('mapea sentDate a datetime', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r['#HREF_UrlCotizacion']).toBe('https://hubspot.com/q1');
+    expect(r.datetime).toBe('2026/07/11');
   });
 
-  test('direccion null → DirecUbiComodato vacío', () => {
-    const r = resolver.resolveTabValues({ ...baseCtx, direccion: null });
-    expect(r.DirecUbiComodato).toBe('');
+  test('mapea quote a urlQuotation', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.urlQuotation).toBe('https://hubspot.com/q1');
   });
 
-  test('quote vacío → #HREF_UrlCotizacion vacío', () => {
+  test('quote vacío → urlQuotation vacío', () => {
     const r = resolver.resolveTabValues({ ...baseCtx, quote: { hsQuoteLink: '' } });
-    expect(r['#HREF_UrlCotizacion']).toBe('');
+    expect(r.urlQuotation).toBe('');
   });
 
   test('0 capex: todos los slots vacíos', () => {
     const r = resolver.resolveTabValues({ ...baseCtx, capex: [] });
-    for (let i = 1; i <= 6; i++) {
-      expect(r[`QrCpx${i}`]).toBe('');
-      expect(r[`NombreCpx${i}`]).toBe('');
-      expect(r[`CantidadCpx${i}`]).toBe('');
-      expect(r[`CostoCpx${i}`]).toBe('');
+    for (let i = 1; i <= 5; i++) {
+      expect(r[`codeQR_${i}`]).toBe('');
+      expect(r[`descriptionCapex_${i}`]).toBe('');
+      expect(r[`quantity_${i}`]).toBe('');
+      expect(r[`price_${i}`]).toBe('');
     }
   });
 
-  test('3 capex: slots 1-3 con datos, 4-6 vacíos', () => {
+  test('3 capex: slots 1-3 con datos, 4-5 vacíos', () => {
     const capex = [makeCapex('A'), makeCapex('B'), makeCapex('C')];
     const r = resolver.resolveTabValues({ ...baseCtx, capex });
-    expect(r.QrCpx1).toBe('Q-A');
-    expect(r.NombreCpx2).toBe('Nombre-B');
-    expect(r.CostoCpx3).toBe('Costo-C');
-    expect(r.QrCpx4).toBe('');
-    expect(r.NombreCpx5).toBe('');
-    expect(r.CostoCpx6).toBe('');
+    expect(r.codeQR_1).toBe('Q-A');
+    expect(r.descriptionCapex_2).toBe('Nombre-B');
+    expect(r.quantity_3).toBe('Cant-C');
+    expect(r.price_3).toBe('Costo-C');
+    expect(r.codeQR_4).toBe('');
+    expect(r.descriptionCapex_4).toBe('');
+    expect(r.quantity_5).toBe('');
+    expect(r.price_5).toBe('');
   });
 
-  test('6 capex: slots 1-6 llenos', () => {
-    const capex = ['A', 'B', 'C', 'D', 'E', 'F'].map(makeCapex);
+  test('5 capex: slots 1-5 llenos', () => {
+    const capex = ['A', 'B', 'C', 'D', 'E'].map(makeCapex);
     const r = resolver.resolveTabValues({ ...baseCtx, capex });
-    expect(r.QrCpx6).toBe('Q-F');
-    expect(r.NombreCpx6).toBe('Nombre-F');
-    expect(r.CantidadCpx6).toBe('Cant-F');
-    expect(r.CostoCpx6).toBe('Costo-F');
+    expect(r.codeQR_5).toBe('Q-E');
+    expect(r.descriptionCapex_5).toBe('Nombre-E');
+    expect(r.quantity_5).toBe('Cant-E');
+    expect(r.price_5).toBe('Costo-E');
   });
 
   test('tolerancia: contexto totalmente vacío produce strings vacíos en todas las keys', () => {
     const sparseCtx: ResolutionContext = {
       templateId: 'tpl-1',
       company: { razonSocial: '', pais: '' },
-      contactoLegal: { firstName: '', lastName: '', docIdentificacion: '' },
+      contactoLegal: { fullName: '', dni: '', pais: '' },
+      proveedorCountry: '',
+      location: '',
+      sentDate: '',
       capex: [],
-      direccion: null,
       quote: { hsQuoteLink: '' },
     };
     const r = resolver.resolveTabValues(sparseCtx);
@@ -122,9 +127,11 @@ describe('createStaticTemplateMappingResolver', () => {
     const undefinedCtx = {
       templateId: 'tpl-1',
       company: { razonSocial: undefined, pais: undefined },
-      contactoLegal: { firstName: undefined, lastName: undefined, docIdentificacion: undefined },
-      capex: [{ qrCapex: undefined, nombre: undefined, cantidad: undefined, costoNeto: undefined }],
-      direccion: null,
+      contactoLegal: { fullName: undefined, dni: undefined, pais: undefined },
+      proveedorCountry: undefined,
+      location: undefined,
+      sentDate: undefined,
+      capex: [{ codigo_qr: undefined, nombre: undefined, cantidad: undefined, costoNeto: undefined }],
       quote: { hsQuoteLink: undefined },
     } as unknown as ResolutionContext;
 

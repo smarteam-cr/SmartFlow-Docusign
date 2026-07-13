@@ -2,7 +2,6 @@ export type {
   ResolutionCompany,
   ResolutionContactoLegal,
   ResolutionCapex,
-  ResolutionDireccion,
   ResolutionQuote,
   ResolutionContext,
   TemplateMappingResolver,

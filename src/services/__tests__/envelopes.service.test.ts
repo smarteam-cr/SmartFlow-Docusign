@@ -28,6 +28,7 @@ const ada: Contact = {
   lastName: 'Lovelace',
   email: 'ada@math.org',
   docIdentificacion: 'CC-12345',
+  pais: 'Costa Rica',
 };
 
 const grace: Contact = {
@@ -36,6 +37,7 @@ const grace: Contact = {
   lastName: 'Hopper',
   email: 'grace@navy.mil',
   docIdentificacion: 'CC-99999',
+  pais: '',
 };
 
 const fullCompany: Company = {
@@ -47,7 +49,7 @@ const fullCompany: Company = {
 const fullCapex: Capex[] = [
   {
     id: 'cx-1',
-    qrCapex: 'Q-A',
+    codigo_qr: 'Q-A',
     nombre: 'Equipo A',
     cantidad: '1',
     costoNeto: '100',
@@ -72,6 +74,7 @@ const proveedorContact: Contact = {
   lastName: 'Gómez',
   email: 'maria@proveedor.co',
   docIdentificacion: '',
+  pais: '',
 };
 
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
@@ -136,19 +139,18 @@ function makeFakeDocusign(overrides: Partial<DocusignAdapter> = {}): DocusignAda
 }
 
 const stubResolvedTabs: Record<string, string> = {
-  RazonSocial: 'SIGMA ALIMENTOS',
-  PaisRazonSocial: 'MX',
-  NombreCliente: 'Ada',
-  ApellidosCliente: 'Lovelace',
-  DocIdentCliente: 'CC-12345',
-  DirecUbiComodato: 'Calle A',
-  '#HREF_UrlCotizacion': 'https://hubspot.com/q1',
-  QrCpx1: 'Q-A', NombreCpx1: 'Equipo A', CantidadCpx1: '1', CostoCpx1: '100',
-  QrCpx2: '', NombreCpx2: '', CantidadCpx2: '', CostoCpx2: '',
-  QrCpx3: '', NombreCpx3: '', CantidadCpx3: '', CostoCpx3: '',
-  QrCpx4: '', NombreCpx4: '', CantidadCpx4: '', CostoCpx4: '',
-  QrCpx5: '', NombreCpx5: '', CantidadCpx5: '', CostoCpx5: '',
-  QrCpx6: '', NombreCpx6: '', CantidadCpx6: '', CostoCpx6: '',
+  country: 'Costa Rica',
+  legalRepresentative: 'Ada Lovelace',
+  dniLegalRepresentative: 'CC-12345',
+  countryINVE: 'España',
+  location: '',
+  urlQuotation: 'https://hubspot.com/q1',
+  datetime: '2026/07/11',
+  codeQR_1: 'Q-A', descriptionCapex_1: 'Equipo A', quantity_1: '1', price_1: '100',
+  codeQR_2: '', descriptionCapex_2: '', quantity_2: '', price_2: '',
+  codeQR_3: '', descriptionCapex_3: '', quantity_3: '', price_3: '',
+  codeQR_4: '', descriptionCapex_4: '', quantity_4: '', price_4: '',
+  codeQR_5: '', descriptionCapex_5: '', quantity_5: '', price_5: '',
 };
 
 function makeFakeMapping(
@@ -166,15 +168,15 @@ function makeFakeTemplateRoles(
   overrides: Partial<TemplateRolesResolver> = {}
 ): TemplateRolesResolver {
   return {
-    getProveedorContactId: jest
-      .fn<TemplateRolesResolver['getProveedorContactId']>()
-      .mockReturnValue('c-proveedor'),
+    getProveedorConfig: jest
+      .fn<TemplateRolesResolver['getProveedorConfig']>()
+      .mockReturnValue({ contactId: 'c-proveedor', country: 'España' }),
     ...overrides,
   };
 }
 
 describe('envelopes.service — happy paths', () => {
-  test('3 firmantes Propietario→Proveedor→Cliente, tabs solo en Propietario, fallback al contactId del request cuando no hay jurídico', async () => {
+  test('2 firmantes Proveedor→Cliente, tabs solo en Proveedor, fallback al contactId del request cuando no hay jurídico', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
@@ -204,18 +206,20 @@ describe('envelopes.service — happy paths', () => {
     expect(hubspot.getDealCapex).toHaveBeenCalledWith('12345');
     expect(hubspot.getDealLatestQuote).toHaveBeenCalledWith('12345');
     expect(hubspot.getCompanyDirecciones).toHaveBeenCalledWith('co-1');
-    expect(templateRoles.getProveedorContactId).toHaveBeenCalledWith('tpl-abc');
+    expect(templateRoles.getProveedorConfig).toHaveBeenCalledWith('tpl-abc');
 
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
       company: { razonSocial: 'SIGMA ALIMENTOS', pais: 'MX' },
       contactoLegal: {
-        firstName: 'Ada',
-        lastName: 'Lovelace',
-        docIdentificacion: 'CC-12345',
+        fullName: 'Ada Lovelace',
+        dni: 'CC-12345',
+        pais: 'Costa Rica',
       },
-      capex: [{ qrCapex: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
-      direccion: { direction: 'Calle A' },
+      proveedorCountry: 'España',
+      location: '',
+      sentDate: expect.stringMatching(/^\d{4}\/\d{2}\/\d{2}$/),
+      capex: [{ codigo_qr: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
       quote: { hsQuoteLink: 'https://hubspot.com/q1' },
     });
 
@@ -223,23 +227,17 @@ describe('envelopes.service — happy paths', () => {
       templateId: 'tpl-abc',
       roles: [
         {
-          roleName: 'Propietario',
-          name: 'Carlos Owner',
-          email: 'carlos@empresa.co',
-          routingOrder: 1,
-          tabs: stubResolvedTabs,
-        },
-        {
           roleName: 'Proveedor',
           name: 'María Gómez',
           email: 'maria@proveedor.co',
-          routingOrder: 2,
+          routingOrder: 1,
+          tabs: { ...stubResolvedTabs, company: 'Smarteam Test' },
         },
         {
           roleName: 'Cliente',
           name: 'Ada Lovelace',
           email: 'ada@math.org',
-          routingOrder: 3,
+          routingOrder: 2,
         },
       ],
       customFields: {
@@ -259,7 +257,7 @@ describe('envelopes.service — happy paths', () => {
     }));
   });
 
-  test('Propietario lleva el tab #HREF_UrlCotizacion entre los prefillTabs', async () => {
+  test('Proveedor lleva el tab urlQuotation entre los prefillTabs', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
@@ -278,10 +276,8 @@ describe('envelopes.service — happy paths', () => {
 
     const call = (docusign.sendEnvelopeFromTemplate as jest.Mock).mock
       .calls[0]![0] as { roles: Array<{ roleName: string; tabs?: Record<string, string> }> };
-    const propietario = call.roles.find((r) => r.roleName === 'Propietario');
-    expect(propietario?.tabs?.['#HREF_UrlCotizacion']).toBe('https://hubspot.com/q1');
     const proveedor = call.roles.find((r) => r.roleName === 'Proveedor');
-    expect(proveedor?.tabs).toBeUndefined();
+    expect(proveedor?.tabs?.urlQuotation).toBe('https://hubspot.com/q1');
     const cliente = call.roles.find((r) => r.roleName === 'Cliente');
     expect(cliente?.tabs).toBeUndefined();
   });
@@ -293,6 +289,7 @@ describe('envelopes.service — happy paths', () => {
       lastName: 'Jurídico',
       email: 'juridico@empresa.co',
       docIdentificacion: 'CC-J-999',
+      pais: 'Panamá',
     };
     const hubspot = makeFakeHubspot({
       findJuridicoContactIds: jest
@@ -326,42 +323,60 @@ describe('envelopes.service — happy paths', () => {
     expect(cliente?.name).toBe('Don Jurídico');
   });
 
-  test('happy path con directionId específico: usa esa dirección, no la primera', async () => {
+  test('directionId válido: no bloquea el envío (solo se valida pertenencia)', async () => {
     const hubspot = makeFakeHubspot({
       getCompanyDirecciones: jest
         .fn<HubSpotAdapter['getCompanyDirecciones']>()
         .mockResolvedValue([direccionA, direccionB]),
     });
-    const templateMapping = makeFakeMapping();
+    const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
       hubspot,
-      docusign: makeFakeDocusign(),
-      templateMapping,
+      docusign,
+      templateMapping: makeFakeMapping(),
       templateRoles: makeFakeTemplateRoles(),
       portalId: 'portal-1',
     });
 
-    await service.sendFromTemplate({
+    const result = await service.sendFromTemplate({
       dealId: '12345',
       templateId: 'tpl-abc',
       contactId: 'c-ada',
       directionId: 'dir-B',
     });
 
-    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
-      .calls[0]![0] as { direccion: { direction: string } | null };
-    expect(ctxArg.direccion).toEqual({ direction: 'Calle B' });
+    expect(result.envelopeId).toBe('env-123');
+    expect(docusign.sendEnvelopeFromTemplate).toHaveBeenCalledTimes(1);
   });
 
-  test('sin direcciones en la company: direccion null en el contexto, sin error', async () => {
+  test('sin direcciones en la company: no bloquea el envío', async () => {
     const hubspot = makeFakeHubspot({
       getCompanyDirecciones: jest
         .fn<HubSpotAdapter['getCompanyDirecciones']>()
         .mockResolvedValue([]),
     });
-    const templateMapping = makeFakeMapping();
+    const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
       hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    const result = await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+    });
+
+    expect(result.envelopeId).toBe('env-123');
+  });
+
+  test('location del request body llega tal cual al contexto del resolver', async () => {
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
       docusign: makeFakeDocusign(),
       templateMapping,
       templateRoles: makeFakeTemplateRoles(),
@@ -372,11 +387,83 @@ describe('envelopes.service — happy paths', () => {
       dealId: '12345',
       templateId: 'tpl-abc',
       contactId: 'c-ada',
+      location: 'Bodega 4, San Salvador',
     });
 
     const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
-      .calls[0]![0] as { direccion: unknown };
-    expect(ctxArg.direccion).toBeNull();
+      .calls[0]![0] as { location: string };
+    expect(ctxArg.location).toBe('Bodega 4, San Salvador');
+  });
+
+  test('fallback: legalRepresentative y dniLegalRepresentative del body cuando HubSpot no los tiene', async () => {
+    const sinDatos: Contact = {
+      id: 'c-sin-datos',
+      firstName: '',
+      lastName: '',
+      email: 'sindatos@empresa.co',
+      docIdentificacion: '',
+      pais: '',
+    };
+    const hubspot = makeFakeHubspot({
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockResolvedValue([sinDatos]),
+    });
+    const templateMapping = makeFakeMapping();
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-sin-datos',
+      legalRepresentative: 'Juan Pérez',
+      dniLegalRepresentative: '00106808-5',
+      country: 'El Salvador',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { contactoLegal: { fullName: string; dni: string; pais: string } };
+    expect(ctxArg.contactoLegal.fullName).toBe('Juan Pérez');
+    expect(ctxArg.contactoLegal.dni).toBe('00106808-5');
+    expect(ctxArg.contactoLegal.pais).toBe('El Salvador');
+
+    const call = (docusign.sendEnvelopeFromTemplate as jest.Mock).mock
+      .calls[0]![0] as { roles: Array<{ roleName: string; name: string }> };
+    const cliente = call.roles.find((r) => r.roleName === 'Cliente');
+    expect(cliente?.name).toBe('Juan Pérez');
+  });
+
+  test('HubSpot gana sobre el body cuando ambos traen datos del representante legal', async () => {
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+      legalRepresentative: 'Otro Nombre',
+      dniLegalRepresentative: 'OTRO-DNI',
+      country: 'Otro País',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { contactoLegal: { fullName: string; dni: string; pais: string } };
+    expect(ctxArg.contactoLegal.fullName).toBe('Ada Lovelace');
+    expect(ctxArg.contactoLegal.dni).toBe('CC-12345');
+    expect(ctxArg.contactoLegal.pais).toBe('Costa Rica');
   });
 });
 
@@ -416,7 +503,7 @@ describe('envelopes.service — errores estructurales', () => {
 
   test('CONTACT_EMAIL_MISSING (defensivo) si el chosen contact tiene email vacío', async () => {
     const noEmail: Contact = {
-      id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '', docIdentificacion: '',
+      id: 'c-ghost', firstName: 'Ghost', lastName: '', email: '', docIdentificacion: '', pais: '',
     };
     const hubspot = makeFakeHubspot({
       getDealContacts: jest
@@ -456,8 +543,8 @@ describe('envelopes.service — errores estructurales', () => {
 
   test('PROVEEDOR_NOT_CONFIGURED cuando el templateId no está mapeado', async () => {
     const templateRoles = makeFakeTemplateRoles({
-      getProveedorContactId: jest
-        .fn<TemplateRolesResolver['getProveedorContactId']>()
+      getProveedorConfig: jest
+        .fn<TemplateRolesResolver['getProveedorConfig']>()
         .mockReturnValue(undefined),
     });
     const service = createEnvelopesService({
@@ -481,7 +568,7 @@ describe('envelopes.service — errores estructurales', () => {
       getContactById: jest
         .fn<HubSpotAdapter['getContactById']>()
         .mockResolvedValue({
-          id: 'c-prov', firstName: 'María', lastName: 'G', email: '', docIdentificacion: '',
+          id: 'c-prov', firstName: 'María', lastName: 'G', email: '', docIdentificacion: '', pais: '',
         }),
     });
     const service = createEnvelopesService({
@@ -521,6 +608,7 @@ describe('envelopes.service — errores estructurales', () => {
       lastName: 'J',
       email: '',
       docIdentificacion: 'X',
+      pais: '',
     };
     const hubspot = makeFakeHubspot({
       findJuridicoContactIds: jest
@@ -542,6 +630,39 @@ describe('envelopes.service — errores estructurales', () => {
     await expect(
       service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
     ).rejects.toMatchObject({ code: 'CLIENTE_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  test('CLIENTE_LEGAL_DATA_MISSING cuando ni HubSpot ni el body traen nombre y DNI', async () => {
+    const sinDatos: Contact = {
+      id: 'c-sin-datos',
+      firstName: '',
+      lastName: '',
+      email: 'sindatos@empresa.co',
+      docIdentificacion: '',
+      pais: '',
+    };
+    const hubspot = makeFakeHubspot({
+      getDealContacts: jest
+        .fn<HubSpotAdapter['getDealContacts']>()
+        .mockResolvedValue([sinDatos]),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot,
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-sin-datos' })
+    ).rejects.toMatchObject({
+      code: 'CLIENTE_LEGAL_DATA_MISSING',
+      httpStatus: 422,
+      details: { missing: ['legalRepresentative', 'dniLegalRepresentative'] },
+    });
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
   });
 
   test('QUOTE_NOT_FOUND propagado del adapter', async () => {

@@ -1,11 +1,18 @@
 import jwt from 'jsonwebtoken';
 import { ExternalServiceError } from '../../lib/errors/index.js';
 
-const DOCUSIGN_OAUTH_HOST = 'account-d.docusign.com';
-const TOKEN_ENDPOINT = `https://${DOCUSIGN_OAUTH_HOST}/oauth/token`;
 const JWT_TTL_SECONDS = 3600;
 const TOKEN_REFRESH_BUFFER_SECONDS = 60;
 const HTTP_TIMEOUT_MS = 10_000;
+
+/**
+ * Derives the DocuSign OAuth host from the eSignature base path.
+ * Demo/sandbox (demo.docusign.net) → account-d.docusign.com.
+ * Everything else (www.docusign.net, na*.docusign.net) → account.docusign.com.
+ */
+export function resolveDocusignOAuthHost(basePath: string): string {
+  return /demo/i.test(basePath) ? 'account-d.docusign.com' : 'account.docusign.com';
+}
 
 export interface JwtAuthClient {
   /**
@@ -23,6 +30,11 @@ export interface JwtAuthClientConfig {
    * we normalize internally.
    */
   privateKey: string;
+  /**
+   * OAuth host to authenticate against, e.g. account-d.docusign.com (demo) or
+   * account.docusign.com (prod). Derive it with resolveDocusignOAuthHost().
+   */
+  oauthHost: string;
 }
 
 interface CachedToken {
@@ -32,6 +44,7 @@ interface CachedToken {
 
 export function createJwtAuthClient(config: JwtAuthClientConfig): JwtAuthClient {
   const normalizedKey = config.privateKey.replace(/\\n/g, '\n');
+  const tokenEndpoint = `https://${config.oauthHost}/oauth/token`;
   let cached: CachedToken | null = null;
   // In-flight promise: when a refresh is already underway, concurrent callers
   // share that promise instead of firing duplicate OAuth requests.
@@ -42,7 +55,7 @@ export function createJwtAuthClient(config: JwtAuthClientConfig): JwtAuthClient 
     const payload = {
       iss: config.clientId,
       sub: config.userId,
-      aud: DOCUSIGN_OAUTH_HOST,
+      aud: config.oauthHost,
       iat: nowSec,
       exp: nowSec + JWT_TTL_SECONDS,
       scope: 'signature impersonation',
@@ -69,7 +82,7 @@ export function createJwtAuthClient(config: JwtAuthClientConfig): JwtAuthClient 
 
     let res: Response;
     try {
-      res = await fetch(TOKEN_ENDPOINT, {
+      res = await fetch(tokenEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body,

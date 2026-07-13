@@ -3,7 +3,7 @@ import { parseEnv } from '../env.js';
 
 describe('parseEnv', () => {
   const validEnv = {
-    PORT: '3000',
+    PORT: '3002',
     NODE_ENV: 'development',
     HUBSPOT_ACCESS_TOKEN: 'pat-na1-xxxxxxxx',
     DOCUSIGN_CLIENT_ID: 'abc-123',
@@ -18,7 +18,7 @@ describe('parseEnv', () => {
 
   test('parses a valid env object', () => {
     const env = parseEnv(validEnv);
-    expect(env.PORT).toBe(3000);
+    expect(env.PORT).toBe(3002);
     expect(env.NODE_ENV).toBe('development');
     expect(env.HUBSPOT_ACCESS_TOKEN).toBe('pat-na1-xxxxxxxx');
   });

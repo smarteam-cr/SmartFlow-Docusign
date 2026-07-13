@@ -79,8 +79,8 @@ describe('DocusignAdapter.sendEnvelopeFromTemplate', () => {
     };
     expect(body.customFields?.textCustomFields).toEqual(
       expect.arrayContaining([
-        { name: 'hubspot_deal_id', value: '999', show: 'false', required: 'false' },
-        { name: 'hubspot_portal_id', value: '123', show: 'false', required: 'false' },
+        { name: 'hubspot_deal_id', value: '999', show: 'true', required: 'false' },
+        { name: 'hubspot_portal_id', value: '123', show: 'true', required: 'false' },
       ])
     );
   });
