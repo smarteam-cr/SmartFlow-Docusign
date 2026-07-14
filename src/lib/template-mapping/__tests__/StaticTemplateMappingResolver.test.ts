@@ -18,7 +18,7 @@ const baseCtx: ResolutionContext = {
   proveedorCountry: 'España',
   location: 'San José, Zona Franca',
   commercialAgreement: 'Acuerdo Marco 2026',
-  sentDate: '2026/07/11',
+  sentDate: '11/07/2026',
   capex: [],
   quote: { hsQuoteLink: 'https://hubspot.com/q1' },
 };
@@ -68,7 +68,7 @@ describe('createStaticTemplateMappingResolver', () => {
 
   test('mapea sentDate a datetime', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r.datetime).toBe('2026/07/11');
+    expect(r.datetime).toBe('11/07/2026');
   });
 
   test('mapea quote a urlQuotation', () => {

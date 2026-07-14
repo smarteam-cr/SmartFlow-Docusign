@@ -223,7 +223,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         proveedorCountry: proveedorConfig.country,
         location: input.location ?? '',
         commercialAgreement: input.commercialAgreement ?? '',
-        sentDate: toISODate().replace(/-/g, '/'),
+        sentDate: toISODate().split('-').reverse().join('/'),
         capex: capex.map((c) => ({
           codigo_qr: c.codigo_qr,
           nombre: c.nombre,
@@ -253,8 +253,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
             name: proveedorName,
             email: proveedor.email,
             routingOrder: 1,
-            // TODO: reemplazar hardcode por dato de HubSpot (company.razonSocial)
-            tabs: { ...tabs, company: 'Smarteam Test' },
+            tabs,
           },
           {
             roleName: 'Cliente',

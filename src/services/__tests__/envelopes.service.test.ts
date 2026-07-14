@@ -145,7 +145,7 @@ const stubResolvedTabs: Record<string, string> = {
   countryINVE: 'España',
   location: '',
   urlQuotation: 'https://hubspot.com/q1',
-  datetime: '2026/07/11',
+  datetime: '11/07/2026',
   codeQR_1: 'Q-A', descriptionCapex_1: 'Equipo A', quantity_1: '1', price_1: '100',
   codeQR_2: '', descriptionCapex_2: '', quantity_2: '', price_2: '',
   codeQR_3: '', descriptionCapex_3: '', quantity_3: '', price_3: '',
@@ -219,7 +219,7 @@ describe('envelopes.service — happy paths', () => {
       proveedorCountry: 'España',
       location: '',
       commercialAgreement: '',
-      sentDate: expect.stringMatching(/^\d{4}\/\d{2}\/\d{2}$/),
+      sentDate: expect.stringMatching(/^\d{2}\/\d{2}\/\d{4}$/),
       capex: [{ codigo_qr: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
       quote: { hsQuoteLink: 'https://hubspot.com/q1' },
     });
@@ -232,7 +232,7 @@ describe('envelopes.service — happy paths', () => {
           name: 'María Gómez',
           email: 'maria@proveedor.co',
           routingOrder: 1,
-          tabs: { ...stubResolvedTabs, company: 'Smarteam Test' },
+          tabs: stubResolvedTabs,
         },
         {
           roleName: 'Cliente',

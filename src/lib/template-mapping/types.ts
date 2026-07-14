@@ -38,7 +38,7 @@ export interface ResolutionContext {
   location: string;
   /** Acuerdo comercial, viene tal cual del request body (tab Commercial_Agreement). */
   commercialAgreement: string;
-  /** Fecha de envío en formato YYYY/MM/DD (tab datetime del template). */
+  /** Fecha de envío en formato DD/MM/YYYY (tab datetime del template). */
   sentDate: string;
   capex: ResolutionCapex[];
   quote: ResolutionQuote;
