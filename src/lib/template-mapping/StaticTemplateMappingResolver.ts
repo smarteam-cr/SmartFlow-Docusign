@@ -18,6 +18,7 @@ export function createStaticTemplateMappingResolver(): TemplateMappingResolver {
         dniLegalRepresentative: ctx.contactoLegal?.dni ?? '',
         countryINVE: ctx.proveedorCountry ?? '',
         location: ctx.location ?? '',
+        Commercial_Agreement: ctx.commercialAgreement ?? '',
         urlQuotation: ctx.quote?.hsQuoteLink ?? '',
         datetime: ctx.sentDate ?? '',
       };

@@ -218,6 +218,7 @@ describe('envelopes.service — happy paths', () => {
       },
       proveedorCountry: 'España',
       location: '',
+      commercialAgreement: '',
       sentDate: expect.stringMatching(/^\d{4}\/\d{2}\/\d{2}$/),
       capex: [{ codigo_qr: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
       quote: { hsQuoteLink: 'https://hubspot.com/q1' },
@@ -393,6 +394,28 @@ describe('envelopes.service — happy paths', () => {
     const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
       .calls[0]![0] as { location: string };
     expect(ctxArg.location).toBe('Bodega 4, San Salvador');
+  });
+
+  test('commercialAgreement del request body llega tal cual al contexto del resolver', async () => {
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+      commercialAgreement: 'Acuerdo Marco 2026',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { commercialAgreement: string };
+    expect(ctxArg.commercialAgreement).toBe('Acuerdo Marco 2026');
   });
 
   test('fallback: legalRepresentative y dniLegalRepresentative del body cuando HubSpot no los tiene', async () => {

@@ -29,6 +29,8 @@ export interface SendFromTemplateInput {
   dniLegalRepresentative?: string;
   /** Fallback si el contacto de HubSpot no tiene country (país de origen del cliente). */
   country?: string;
+  /** Acuerdo comercial — se envía tal cual al tab Commercial_Agreement del template. */
+  commercialAgreement?: string;
 }
 
 export interface SendFromTemplateResult {
@@ -220,6 +222,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         },
         proveedorCountry: proveedorConfig.country,
         location: input.location ?? '',
+        commercialAgreement: input.commercialAgreement ?? '',
         sentDate: toISODate().replace(/-/g, '/'),
         capex: capex.map((c) => ({
           codigo_qr: c.codigo_qr,

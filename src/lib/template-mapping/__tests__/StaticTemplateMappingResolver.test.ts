@@ -17,6 +17,7 @@ const baseCtx: ResolutionContext = {
   contactoLegal: { fullName: 'Ada Lovelace', dni: 'CC-12345', pais: 'Costa Rica' },
   proveedorCountry: 'España',
   location: 'San José, Zona Franca',
+  commercialAgreement: 'Acuerdo Marco 2026',
   sentDate: '2026/07/11',
   capex: [],
   quote: { hsQuoteLink: 'https://hubspot.com/q1' },
@@ -25,9 +26,10 @@ const baseCtx: ResolutionContext = {
 describe('createStaticTemplateMappingResolver', () => {
   const resolver = createStaticTemplateMappingResolver();
 
-  test('emite las 27 keys esperadas (7 fijas + 20 capex)', () => {
+  test('emite las 28 keys esperadas (8 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
+      'Commercial_Agreement',
       'codeQR_1', 'codeQR_2', 'codeQR_3', 'codeQR_4', 'codeQR_5',
       'country',
       'countryINVE',
@@ -57,6 +59,11 @@ describe('createStaticTemplateMappingResolver', () => {
   test('mapea location tal cual', () => {
     const r = resolver.resolveTabValues(baseCtx);
     expect(r.location).toBe('San José, Zona Franca');
+  });
+
+  test('mapea commercialAgreement a Commercial_Agreement', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.Commercial_Agreement).toBe('Acuerdo Marco 2026');
   });
 
   test('mapea sentDate a datetime', () => {
@@ -113,6 +120,7 @@ describe('createStaticTemplateMappingResolver', () => {
       contactoLegal: { fullName: '', dni: '', pais: '' },
       proveedorCountry: '',
       location: '',
+      commercialAgreement: '',
       sentDate: '',
       capex: [],
       quote: { hsQuoteLink: '' },
@@ -130,6 +138,7 @@ describe('createStaticTemplateMappingResolver', () => {
       contactoLegal: { fullName: undefined, dni: undefined, pais: undefined },
       proveedorCountry: undefined,
       location: undefined,
+      commercialAgreement: undefined,
       sentDate: undefined,
       capex: [{ codigo_qr: undefined, nombre: undefined, cantidad: undefined, costoNeto: undefined }],
       quote: { hsQuoteLink: undefined },
