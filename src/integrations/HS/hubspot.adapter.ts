@@ -27,6 +27,8 @@ export interface Company {
   id: string;
   razonSocial: string;
   pais: string;
+  /** Propiedad direccion_fiscal de la company. */
+  direccionFiscal: string;
 }
 
 export interface DealOwner {
@@ -305,7 +307,7 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const companyUrl =
         `${HUBSPOT_BASE_URL}/crm/v3/objects/companies/${encodeURIComponent(companyId)}` +
-        `?properties=raz_n_social__c,pais`;
+        `?properties=raz_n_social__c,pais,direccion_fiscal`;
       const companyRes = await hubspotFetch(companyUrl);
 
       if (companyRes.status === 404) {
@@ -325,13 +327,14 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
 
       const companyBody = (await companyRes.json()) as {
         id?: string;
-        properties?: { raz_n_social__c?: string; pais?: string };
+        properties?: { raz_n_social__c?: string; pais?: string; direccion_fiscal?: string };
       };
 
       return {
         id: companyBody.id ?? companyId,
         razonSocial: companyBody.properties?.raz_n_social__c?.trim() ?? '',
         pais: companyBody.properties?.pais?.trim() ?? '',
+        direccionFiscal: companyBody.properties?.direccion_fiscal?.trim() ?? '',
       };
     },
 

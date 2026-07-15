@@ -17,7 +17,7 @@ function makeFakeDeps(overrides?: Partial<EnvelopeLifecycleDeps>): EnvelopeLifec
       getDealOwner: jest.fn<HubSpotAdapter['getDealOwner']>().mockResolvedValue({ id: '', name: '', email: '' }),
       getContactById: jest.fn<HubSpotAdapter['getContactById']>().mockResolvedValue({ id: '', firstName: '', lastName: '', email: '', docIdentificacion: '', pais: '' }),
       findJuridicoContactIds: jest.fn<HubSpotAdapter['findJuridicoContactIds']>().mockResolvedValue([]),
-      getDealPrimaryCompany: jest.fn<HubSpotAdapter['getDealPrimaryCompany']>().mockResolvedValue({ id: '', razonSocial: '', pais: '' }),
+      getDealPrimaryCompany: jest.fn<HubSpotAdapter['getDealPrimaryCompany']>().mockResolvedValue({ id: '', razonSocial: '', pais: '', direccionFiscal: '' }),
       getDealCapex: jest.fn<HubSpotAdapter['getDealCapex']>().mockResolvedValue([]),
       getCompanyDirecciones: jest.fn<HubSpotAdapter['getCompanyDirecciones']>().mockResolvedValue([]),
       getDealLatestQuote: jest.fn<HubSpotAdapter['getDealLatestQuote']>().mockResolvedValue({ id: '', hsQuoteLink: '' }),

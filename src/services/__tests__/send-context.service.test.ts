@@ -64,7 +64,12 @@ function makeFakeDeps(
         .mockResolvedValue([]),
       getDealPrimaryCompany: jest
         .fn<HubSpotAdapter['getDealPrimaryCompany']>()
-        .mockResolvedValue({ id: 'comp-1', razonSocial: 'Acme', pais: 'ES' }),
+        .mockResolvedValue({
+          id: 'comp-1',
+          razonSocial: 'Acme',
+          pais: 'ES',
+          direccionFiscal: 'Calle Fiscal 42, Madrid',
+        }),
       getContactById: jest
         .fn<HubSpotAdapter['getContactById']>()
         .mockResolvedValue(CONTACT_A),
@@ -77,6 +82,9 @@ function makeFakeDeps(
       getDealLatestQuote: jest
         .fn<HubSpotAdapter['getDealLatestQuote']>()
         .mockResolvedValue(QUOTE),
+      getDealProperties: jest
+        .fn<HubSpotAdapter['getDealProperties']>()
+        .mockResolvedValue({ pais: 'Costa Rica' }),
     },
     docusign: {
       listTemplates: jest
@@ -241,6 +249,36 @@ describe('SendContextService.getSendContext', () => {
     const result = await service.getSendContext('d-1');
 
     expect(result.hasQuote).toBe(false);
+  });
+
+  test('direccionFiscal viene de la company y pais del deal (nivel raíz)', async () => {
+    const deps = makeFakeDeps();
+    const service = createSendContextService(deps);
+
+    const result = await service.getSendContext('d-1');
+
+    expect(result.direccionFiscal).toBe('Calle Fiscal 42, Madrid');
+    expect(result.pais).toBe('Costa Rica');
+    expect(deps.hubspot.getDealProperties).toHaveBeenCalledWith('d-1', ['pais']);
+  });
+
+  test('direccionFiscal es string vacío cuando no hay company', async () => {
+    const deps = makeFakeDeps({
+      hubspot: {
+        ...makeFakeDeps().hubspot,
+        getDealPrimaryCompany: jest
+          .fn<HubSpotAdapter['getDealPrimaryCompany']>()
+          .mockRejectedValue(
+            new ValidationError('DEAL_HAS_NO_COMPANY', 'No company')
+          ),
+      },
+    });
+    const service = createSendContextService(deps);
+
+    const result = await service.getSendContext('d-1');
+
+    expect(result.direccionFiscal).toBe('');
+    expect(result.pais).toBe('Costa Rica');
   });
 
   test('capexCount is 0 when CAPEX_TOO_MANY', async () => {

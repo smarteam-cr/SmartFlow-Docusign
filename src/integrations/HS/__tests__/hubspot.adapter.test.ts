@@ -85,12 +85,24 @@ describe('HubSpotAdapter.getDealPrimaryCompany', () => {
       },
       {
         status: 200,
-        body: { id: 'co-1', properties: { raz_n_social__c: 'SIGMA ALIMENTOS', pais: 'MX' } },
+        body: {
+          id: 'co-1',
+          properties: {
+            raz_n_social__c: 'SIGMA ALIMENTOS',
+            pais: 'MX',
+            direccion_fiscal: 'Av. Reforma 100, CDMX',
+          },
+        },
       },
     ]);
 
     const company = await adapter.getDealPrimaryCompany('d-1');
-    expect(company).toEqual({ id: 'co-1', razonSocial: 'SIGMA ALIMENTOS', pais: 'MX' });
+    expect(company).toEqual({
+      id: 'co-1',
+      razonSocial: 'SIGMA ALIMENTOS',
+      pais: 'MX',
+      direccionFiscal: 'Av. Reforma 100, CDMX',
+    });
   });
 
   test('tolera raz_n_social__c y pais vacíos (devuelve strings vacíos)', async () => {
@@ -108,7 +120,7 @@ describe('HubSpotAdapter.getDealPrimaryCompany', () => {
     ]);
 
     const company = await adapter.getDealPrimaryCompany('d-1');
-    expect(company).toEqual({ id: 'co-2', razonSocial: '', pais: '' });
+    expect(company).toEqual({ id: 'co-2', razonSocial: '', pais: '', direccionFiscal: '' });
   });
 
   test('lanza DEAL_HAS_NO_COMPANY cuando no hay association Primary', async () => {

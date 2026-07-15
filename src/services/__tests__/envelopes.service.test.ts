@@ -43,6 +43,7 @@ const grace: Contact = {
 const fullCompany: Company = {
   id: 'co-1',
   razonSocial: 'SIGMA ALIMENTOS',
+  direccionFiscal: '',
   pais: 'MX',
 };
 

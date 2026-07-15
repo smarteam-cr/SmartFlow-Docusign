@@ -12,6 +12,10 @@ export interface SendContextResult {
   company: { razonSocial: string; pais: string } | null;
   capexCount: number;
   hasQuote: boolean;
+  /** Propiedad direccion_fiscal de la Empresa asociada al Negocio ('' si no hay). */
+  direccionFiscal: string;
+  /** Propiedad pais del Negocio (Deal). */
+  pais: string;
 }
 
 export interface SendContextService {
@@ -21,7 +25,7 @@ export interface SendContextService {
 export interface SendContextServiceDeps {
   hubspot: Pick<
     HubSpotAdapter,
-    'getDealContacts' | 'findJuridicoContactIds' | 'getDealPrimaryCompany' | 'getContactById' | 'getCompanyDirecciones' | 'getDealCapex' | 'getDealLatestQuote'
+    'getDealContacts' | 'findJuridicoContactIds' | 'getDealPrimaryCompany' | 'getContactById' | 'getCompanyDirecciones' | 'getDealCapex' | 'getDealLatestQuote' | 'getDealProperties'
   >;
   docusign: Pick<DocusignAdapter, 'listTemplates'>;
   teamCountry: TeamCountryResolver;
@@ -45,7 +49,7 @@ export function createSendContextService(
 ): SendContextService {
   return {
     async getSendContext(dealId: string, userTeam?: string): Promise<SendContextResult> {
-      const [contacts, juridicoIds, companyResult, templates, capexResult, quoteResult] = await Promise.all([
+      const [contacts, juridicoIds, companyResult, templates, capexResult, quoteResult, dealProps] = await Promise.all([
         deps.hubspot.getDealContacts(dealId),
         deps.hubspot.findJuridicoContactIds(dealId),
         deps.hubspot
@@ -74,6 +78,7 @@ export function createSendContextService(
             }
             throw err;
           }),
+        deps.hubspot.getDealProperties(dealId, ['pais']),
       ]);
 
       let clienteMode: SendContextResult['clienteMode'];
@@ -98,6 +103,8 @@ export function createSendContextService(
         : null;
       const capexCount = capexResult.length;
       const hasQuote = quoteResult === true;
+      const direccionFiscal = companyResult?.direccionFiscal ?? '';
+      const pais = dealProps.pais ?? '';
 
       // Filtro por equipo: si el team mapea a un código de país, solo se
       // devuelven los templates de ese país. Team sin mapeo → sin filtro.
@@ -106,7 +113,7 @@ export function createSendContextService(
         ? filterTemplatesByCountryCode(templates, countryCode)
         : templates;
 
-      return { clienteMode, juridicoContact, contacts, direcciones, templates: visibleTemplates, company, capexCount, hasQuote };
+      return { clienteMode, juridicoContact, contacts, direcciones, templates: visibleTemplates, company, capexCount, hasQuote, direccionFiscal, pais };
     },
   };
 }
