@@ -40,6 +40,8 @@ export interface ResolutionContext {
   commercialAgreement: string;
   /** Dirección fiscal de la empresa, viene tal cual del request body (tab direccionFiscal). */
   direccionFiscal: string;
+  /** Uso exclusivo, viene tal cual del request body (tab exclusiveUse). */
+  exclusiveUse: string;
   /** Fecha de envío en formato DD/MM/YYYY (tab datetime del template). */
   sentDate: string;
   capex: ResolutionCapex[];

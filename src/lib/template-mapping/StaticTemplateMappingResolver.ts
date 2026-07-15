@@ -20,6 +20,7 @@ export function createStaticTemplateMappingResolver(): TemplateMappingResolver {
         location: ctx.location ?? '',
         Commercial_Agreement: ctx.commercialAgreement ?? '',
         direccionFiscal: ctx.direccionFiscal ?? '',
+        exclusiveUse: ctx.exclusiveUse ?? '',
         urlQuotation: ctx.quote?.hsQuoteLink ?? '',
         datetime: ctx.sentDate ?? '',
       };

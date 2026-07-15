@@ -19,6 +19,7 @@ const baseCtx: ResolutionContext = {
   location: 'San José, Zona Franca',
   commercialAgreement: 'Acuerdo Marco 2026',
   direccionFiscal: 'Av. Central 200, San José',
+  exclusiveUse: 'Uso exclusivo oficinas',
   sentDate: '11/07/2026',
   capex: [],
   quote: { hsQuoteLink: 'https://hubspot.com/q1' },
@@ -27,7 +28,7 @@ const baseCtx: ResolutionContext = {
 describe('createStaticTemplateMappingResolver', () => {
   const resolver = createStaticTemplateMappingResolver();
 
-  test('emite las 29 keys esperadas (9 fijas + 20 capex)', () => {
+  test('emite las 30 keys esperadas (10 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
       'Commercial_Agreement',
@@ -38,6 +39,7 @@ describe('createStaticTemplateMappingResolver', () => {
       'descriptionCapex_1', 'descriptionCapex_2', 'descriptionCapex_3', 'descriptionCapex_4', 'descriptionCapex_5',
       'direccionFiscal',
       'dniLegalRepresentative',
+      'exclusiveUse',
       'legalRepresentative',
       'location',
       'price_1', 'price_2', 'price_3', 'price_4', 'price_5',
@@ -71,6 +73,11 @@ describe('createStaticTemplateMappingResolver', () => {
   test('mapea direccionFiscal tal cual', () => {
     const r = resolver.resolveTabValues(baseCtx);
     expect(r.direccionFiscal).toBe('Av. Central 200, San José');
+  });
+
+  test('mapea exclusiveUse tal cual', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.exclusiveUse).toBe('Uso exclusivo oficinas');
   });
 
   test('mapea sentDate a datetime', () => {
@@ -129,6 +136,7 @@ describe('createStaticTemplateMappingResolver', () => {
       location: '',
       commercialAgreement: '',
       direccionFiscal: '',
+      exclusiveUse: '',
       sentDate: '',
       capex: [],
       quote: { hsQuoteLink: '' },
@@ -148,6 +156,7 @@ describe('createStaticTemplateMappingResolver', () => {
       location: undefined,
       commercialAgreement: undefined,
       direccionFiscal: undefined,
+      exclusiveUse: undefined,
       sentDate: undefined,
       capex: [{ codigo_qr: undefined, nombre: undefined, cantidad: undefined, costoNeto: undefined }],
       quote: { hsQuoteLink: undefined },
