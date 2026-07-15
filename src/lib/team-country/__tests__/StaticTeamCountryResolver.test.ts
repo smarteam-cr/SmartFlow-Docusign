@@ -43,4 +43,24 @@ describe('createStaticTeamCountryResolver', () => {
   test('el mapa por defecto tiene los 5 códigos esperados', () => {
     expect(Object.keys(TEAM_COUNTRY_MAP).sort()).toEqual(['CR', 'GT', 'HN', 'RD', 'SV']);
   });
+
+  describe('resolveCountryFullName', () => {
+    test('resuelve el nombre completo para cada código', () => {
+      expect(resolver.resolveCountryFullName('CR')).toBe('Costa Rica');
+      expect(resolver.resolveCountryFullName('GT')).toBe('Guatemala');
+      expect(resolver.resolveCountryFullName('HN')).toBe('Honduras');
+      expect(resolver.resolveCountryFullName('SV')).toBe('El Salvador');
+      expect(resolver.resolveCountryFullName('RD')).toBe('Republica Dominicana');
+    });
+
+    test('no distingue mayúsculas ni espacios en el código', () => {
+      expect(resolver.resolveCountryFullName('cr')).toBe('Costa Rica');
+      expect(resolver.resolveCountryFullName(' CR ')).toBe('Costa Rica');
+    });
+
+    test('código no mapeado → null', () => {
+      expect(resolver.resolveCountryFullName('PA')).toBeNull();
+      expect(resolver.resolveCountryFullName('')).toBeNull();
+    });
+  });
 });

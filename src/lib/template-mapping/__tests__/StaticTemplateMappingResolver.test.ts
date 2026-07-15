@@ -18,6 +18,7 @@ const baseCtx: ResolutionContext = {
   proveedorCountry: 'España',
   location: 'San José, Zona Franca',
   commercialAgreement: 'Acuerdo Marco 2026',
+  direccionFiscal: 'Av. Central 200, San José',
   sentDate: '11/07/2026',
   capex: [],
   quote: { hsQuoteLink: 'https://hubspot.com/q1' },
@@ -26,7 +27,7 @@ const baseCtx: ResolutionContext = {
 describe('createStaticTemplateMappingResolver', () => {
   const resolver = createStaticTemplateMappingResolver();
 
-  test('emite las 28 keys esperadas (8 fijas + 20 capex)', () => {
+  test('emite las 29 keys esperadas (9 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
       'Commercial_Agreement',
@@ -35,6 +36,7 @@ describe('createStaticTemplateMappingResolver', () => {
       'countryINVE',
       'datetime',
       'descriptionCapex_1', 'descriptionCapex_2', 'descriptionCapex_3', 'descriptionCapex_4', 'descriptionCapex_5',
+      'direccionFiscal',
       'dniLegalRepresentative',
       'legalRepresentative',
       'location',
@@ -64,6 +66,11 @@ describe('createStaticTemplateMappingResolver', () => {
   test('mapea commercialAgreement a Commercial_Agreement', () => {
     const r = resolver.resolveTabValues(baseCtx);
     expect(r.Commercial_Agreement).toBe('Acuerdo Marco 2026');
+  });
+
+  test('mapea direccionFiscal tal cual', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.direccionFiscal).toBe('Av. Central 200, San José');
   });
 
   test('mapea sentDate a datetime', () => {
@@ -121,6 +128,7 @@ describe('createStaticTemplateMappingResolver', () => {
       proveedorCountry: '',
       location: '',
       commercialAgreement: '',
+      direccionFiscal: '',
       sentDate: '',
       capex: [],
       quote: { hsQuoteLink: '' },
@@ -139,6 +147,7 @@ describe('createStaticTemplateMappingResolver', () => {
       proveedorCountry: undefined,
       location: undefined,
       commercialAgreement: undefined,
+      direccionFiscal: undefined,
       sentDate: undefined,
       capex: [{ codigo_qr: undefined, nombre: undefined, cantidad: undefined, costoNeto: undefined }],
       quote: { hsQuoteLink: undefined },

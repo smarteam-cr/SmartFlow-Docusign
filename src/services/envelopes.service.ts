@@ -31,6 +31,8 @@ export interface SendFromTemplateInput {
   country?: string;
   /** Acuerdo comercial — se envía tal cual al tab Commercial_Agreement del template. */
   commercialAgreement?: string;
+  /** Dirección fiscal de la empresa — se envía tal cual al tab direccionFiscal del template. */
+  direccionFiscal?: string;
 }
 
 export interface SendFromTemplateResult {
@@ -223,6 +225,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         proveedorCountry: proveedorConfig.country,
         location: input.location ?? '',
         commercialAgreement: input.commercialAgreement ?? '',
+        direccionFiscal: input.direccionFiscal ?? '',
         sentDate: toISODate().split('-').reverse().join('/'),
         capex: capex.map((c) => ({
           codigo_qr: c.codigo_qr,

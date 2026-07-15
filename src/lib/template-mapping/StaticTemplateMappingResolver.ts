@@ -19,6 +19,7 @@ export function createStaticTemplateMappingResolver(): TemplateMappingResolver {
         countryINVE: ctx.proveedorCountry ?? '',
         location: ctx.location ?? '',
         Commercial_Agreement: ctx.commercialAgreement ?? '',
+        direccionFiscal: ctx.direccionFiscal ?? '',
         urlQuotation: ctx.quote?.hsQuoteLink ?? '',
         datetime: ctx.sentDate ?? '',
       };

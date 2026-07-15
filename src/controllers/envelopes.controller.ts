@@ -24,6 +24,7 @@ export const sendEnvelopeBodySchema = z.object({
   dniLegalRepresentative: z.string().min(1).max(64).optional(),
   country: z.string().min(1).max(100).optional(),
   commercialAgreement: z.string().min(1).max(500).optional(),
+  direccionFiscal: z.string().min(1).max(500).optional(),
 });
 
 export type SendEnvelopeBody = z.infer<typeof sendEnvelopeBodySchema>;

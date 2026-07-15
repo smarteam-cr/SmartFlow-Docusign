@@ -16,6 +16,11 @@ export interface SendContextResult {
   direccionFiscal: string;
   /** Propiedad pais del Negocio (Deal). */
   pais: string;
+  /**
+   * Nombre completo del país del Negocio ("CR" → "Costa Rica") según el mapa
+   * en lib/team-country/. Si el código no está mapeado, viaja el valor crudo.
+   */
+  fullLocation: string;
 }
 
 export interface SendContextService {
@@ -32,16 +37,16 @@ export interface SendContextServiceDeps {
 }
 
 /**
- * Deja solo los templates cuyo nombre empieza con el código de país
- * (ej. code "CR" → "CR - Acuerdo comercial..."). Case-insensitive y tolera
- * espacios alrededor del guión.
+ * Deja solo los templates cuyo nombre empieza con el código de país: se
+ * comparan las primeras letras del nombre contra el código, case-insensitive
+ * (ej. code "CR" → "CR Acuerdo Comercial - Comodato").
  */
 function filterTemplatesByCountryCode(
   templates: TemplateSummary[],
   code: string
 ): TemplateSummary[] {
-  const prefix = new RegExp(`^${code}\\s*-`, 'i');
-  return templates.filter((t) => prefix.test(t.name.trim()));
+  const prefix = code.toUpperCase();
+  return templates.filter((t) => t.name.trim().toUpperCase().startsWith(prefix));
 }
 
 export function createSendContextService(
@@ -105,6 +110,9 @@ export function createSendContextService(
       const hasQuote = quoteResult === true;
       const direccionFiscal = companyResult?.direccionFiscal ?? '';
       const pais = dealProps.pais ?? '';
+      const fullLocation = pais
+        ? deps.teamCountry.resolveCountryFullName(pais) ?? pais
+        : '';
 
       // Filtro por equipo: si el team mapea a un código de país, solo se
       // devuelven los templates de ese país. Team sin mapeo → sin filtro.
@@ -113,7 +121,7 @@ export function createSendContextService(
         ? filterTemplatesByCountryCode(templates, countryCode)
         : templates;
 
-      return { clienteMode, juridicoContact, contacts, direcciones, templates: visibleTemplates, company, capexCount, hasQuote, direccionFiscal, pais };
+      return { clienteMode, juridicoContact, contacts, direcciones, templates: visibleTemplates, company, capexCount, hasQuote, direccionFiscal, pais, fullLocation };
     },
   };
 }

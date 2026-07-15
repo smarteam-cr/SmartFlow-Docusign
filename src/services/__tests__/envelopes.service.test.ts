@@ -220,6 +220,7 @@ describe('envelopes.service — happy paths', () => {
       proveedorCountry: 'España',
       location: '',
       commercialAgreement: '',
+      direccionFiscal: '',
       sentDate: expect.stringMatching(/^\d{2}\/\d{2}\/\d{4}$/),
       capex: [{ codigo_qr: 'Q-A', nombre: 'Equipo A', cantidad: '1', costoNeto: '100' }],
       quote: { hsQuoteLink: 'https://hubspot.com/q1' },
@@ -417,6 +418,28 @@ describe('envelopes.service — happy paths', () => {
     const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
       .calls[0]![0] as { commercialAgreement: string };
     expect(ctxArg.commercialAgreement).toBe('Acuerdo Marco 2026');
+  });
+
+  test('direccionFiscal del request body llega tal cual al contexto del resolver', async () => {
+    const templateMapping = makeFakeMapping();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping,
+      templateRoles: makeFakeTemplateRoles(),
+      portalId: 'portal-1',
+    });
+
+    await service.sendFromTemplate({
+      dealId: '12345',
+      templateId: 'tpl-abc',
+      contactId: 'c-ada',
+      direccionFiscal: 'Av. Central 200, San José',
+    });
+
+    const ctxArg = (templateMapping.resolveTabValues as jest.Mock).mock
+      .calls[0]![0] as { direccionFiscal: string };
+    expect(ctxArg.direccionFiscal).toBe('Av. Central 200, San José');
   });
 
   test('fallback: legalRepresentative y dniLegalRepresentative del body cuando HubSpot no los tiene', async () => {

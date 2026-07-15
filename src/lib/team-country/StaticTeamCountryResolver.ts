@@ -1,4 +1,4 @@
-import type { TeamCountryMap, TeamCountryResolver } from './types.js';
+import type { CountryFullNameMap, TeamCountryMap, TeamCountryResolver } from './types.js';
 
 /**
  * Configuración editable: agrega aquí nuevos equipos o códigos de país.
@@ -13,6 +13,18 @@ export const TEAM_COUNTRY_MAP: TeamCountryMap = {
   RD: ['REPUBLICA DOMINICANA'],
 };
 
+/**
+ * Configuración editable: nombre completo (para mostrar) de cada código de
+ * país. Usado para el campo fullLocation del send-context.
+ */
+export const COUNTRY_FULL_NAME_MAP: CountryFullNameMap = {
+  GT: 'Guatemala',
+  CR: 'Costa Rica',
+  HN: 'Honduras',
+  SV: 'El Salvador',
+  RD: 'Republica Dominicana',
+};
+
 /** Uppercase + trim + sin tildes, para comparar con tolerancia. */
 function normalize(value: string): string {
   return value
@@ -23,7 +35,8 @@ function normalize(value: string): string {
 }
 
 export function createStaticTeamCountryResolver(
-  map: TeamCountryMap = TEAM_COUNTRY_MAP
+  map: TeamCountryMap = TEAM_COUNTRY_MAP,
+  fullNames: CountryFullNameMap = COUNTRY_FULL_NAME_MAP
 ): TeamCountryResolver {
   const teamToCode = new Map<string, string>();
   for (const [code, teams] of Object.entries(map)) {
@@ -32,9 +45,17 @@ export function createStaticTeamCountryResolver(
     }
   }
 
+  const codeToFullName = new Map<string, string>();
+  for (const [code, fullName] of Object.entries(fullNames)) {
+    codeToFullName.set(normalize(code), fullName);
+  }
+
   return {
     resolveCountryCode(teamName: string): string | null {
       return teamToCode.get(normalize(teamName)) ?? null;
+    },
+    resolveCountryFullName(code: string): string | null {
+      return codeToFullName.get(normalize(code)) ?? null;
     },
   };
 }

@@ -242,7 +242,7 @@ Setup paso a paso de cuentas externas en spec §14 y §17.
 | `POST` | `/api/v1/docusign/envelopes` | Body `{ dealId, templateId, contactId, directionId? }` → envía envelope. 409 si hay envelope activo |
 | `POST` | `/api/v1/docusign/envelopes/:envelopeId/void` | Body `{ dealId, reason }` (reason min 5 chars) → cancela envelope activo. 409 si terminal |
 | `GET` | `/api/v1/deals/:dealId/envelope-status` | Estado del último envelope: `{ envelopeId, status, sentAt, signedAt, pdfUrl }` |
-| `GET` | `/api/v1/deals/:dealId/send-context` | Contexto para form de envío: `{ clienteMode, juridicoContact, contacts, direcciones, templates, company, capexCount, hasQuote, direccionFiscal, pais }` (`direccionFiscal` = prop `direccion_fiscal` de la Company; `pais` = prop `pais` del Deal). Query opcional `?userTeam=Costa%20Rica`: filtra `templates` por prefijo de país del nombre (`CR - ...`) según el mapa en `lib/team-country/`. Team sin mapeo → sin filtro |
+| `GET` | `/api/v1/deals/:dealId/send-context` | Contexto para form de envío: `{ clienteMode, juridicoContact, contacts, direcciones, templates, company, capexCount, hasQuote, direccionFiscal, pais, fullLocation }` (`direccionFiscal` = prop `direccion_fiscal` de la Company; `pais` = prop `pais` del Deal; `fullLocation` = `pais` expandido a nombre completo vía `lib/team-country/`, crudo si no hay mapeo). Query opcional `?userTeam=Costa%20Rica`: filtra `templates` por prefijo de país del nombre (`CR Acuerdo...` / `CR - ...`) según el mapa en `lib/team-country/`. Team sin mapeo → sin filtro |
 | `POST` | `/api/v1/webhooks/docusign` | Receptor DocuSign Connect (HMAC verificado). Procesa eventos: sent, signing, completed, declined, voided |
 | `GET` | `/health` | `{ status, uptime, version }` (sin auth) |
 

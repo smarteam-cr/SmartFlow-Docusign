@@ -262,6 +262,43 @@ describe('SendContextService.getSendContext', () => {
     expect(deps.hubspot.getDealProperties).toHaveBeenCalledWith('d-1', ['pais']);
   });
 
+  test('fullLocation: pais "CR" del deal se expande a "Costa Rica"', async () => {
+    const deps = makeFakeDeps({
+      hubspot: {
+        ...makeFakeDeps().hubspot,
+        getDealProperties: jest
+          .fn<HubSpotAdapter['getDealProperties']>()
+          .mockResolvedValue({ pais: 'CR' }),
+      },
+    });
+    const service = createSendContextService(deps);
+
+    const result = await service.getSendContext('d-1');
+
+    expect(result.pais).toBe('CR');
+    expect(result.fullLocation).toBe('Costa Rica');
+  });
+
+  test('fullLocation: código sin mapeo viaja crudo; pais vacío → string vacío', async () => {
+    const makeWithPais = (pais: string) =>
+      createSendContextService(
+        makeFakeDeps({
+          hubspot: {
+            ...makeFakeDeps().hubspot,
+            getDealProperties: jest
+              .fn<HubSpotAdapter['getDealProperties']>()
+              .mockResolvedValue({ pais }),
+          },
+        })
+      );
+
+    const sinMapeo = await makeWithPais('PA').getSendContext('d-1');
+    expect(sinMapeo.fullLocation).toBe('PA');
+
+    const vacio = await makeWithPais('').getSendContext('d-1');
+    expect(vacio.fullLocation).toBe('');
+  });
+
   test('direccionFiscal es string vacío cuando no hay company', async () => {
     const deps = makeFakeDeps({
       hubspot: {
@@ -306,11 +343,11 @@ describe('SendContextService.getSendContext', () => {
 
 describe('SendContextService.getSendContext — filtro de templates por userTeam', () => {
   const TEMPLATES_BY_COUNTRY: TemplateSummary[] = [
-    { id: 'tpl-gt', name: 'GT - Acuerdo Comercial Guatemala' },
-    { id: 'tpl-cr', name: 'CR - Acuerdo comercial Costa Rica' },
-    { id: 'tpl-cr-2', name: 'cr - Adendum Costa Rica' },
-    { id: 'tpl-hn', name: 'HN - Acuerdo comercial Honduras' },
-    { id: 'tpl-generic', name: 'Contrato sin país' },
+    { id: 'tpl-gt', name: 'GT Acuerdo Comercial - Comodato' },
+    { id: 'tpl-cr', name: 'CR Acuerdo Comercial - Comodato' },
+    { id: 'tpl-cr-2', name: 'cr adendum costa rica' },
+    { id: 'tpl-hn', name: 'HN Acuerdo Comercial - Comodato' },
+    { id: 'tpl-generic', name: 'prueba' },
   ];
 
   function makeDepsWithTemplates(): SendContextServiceDeps {
@@ -323,7 +360,7 @@ describe('SendContextService.getSendContext — filtro de templates por userTeam
     });
   }
 
-  test('userTeam "Costa Rica" → solo templates con prefijo CR (case-insensitive)', async () => {
+  test('userTeam "Costa Rica" → solo templates cuyo nombre empieza con CR (case-insensitive)', async () => {
     const service = createSendContextService(makeDepsWithTemplates());
 
     const result = await service.getSendContext('d-1', 'Costa Rica');
