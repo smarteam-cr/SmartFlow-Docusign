@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   sendContextParamsSchema,
+  sendContextQuerySchema,
   type SendContextController,
 } from '../controllers/send-context.controller.js';
 
@@ -18,6 +19,7 @@ export const sendContextRoutes: FastifyPluginAsync<SendContextRoutesOptions> = a
     {
       schema: {
         params: sendContextParamsSchema,
+        querystring: sendContextQuerySchema,
       },
     },
     opts.controller.getSendContext

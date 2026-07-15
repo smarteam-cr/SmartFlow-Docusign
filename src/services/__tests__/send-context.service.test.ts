@@ -6,6 +6,7 @@ import {
 import type { Contact, Direccion, HubSpotAdapter } from '../../integrations/HS/index.js';
 import type { DocusignAdapter, TemplateSummary } from '../../integrations/Docusign/index.js';
 import { AppError, ValidationError } from '../../lib/errors/index.js';
+import { createStaticTeamCountryResolver } from '../../lib/team-country/index.js';
 import type { Capex, Quote } from '../../integrations/HS/index.js';
 
 const CONTACT_A: Contact = {
@@ -82,6 +83,7 @@ function makeFakeDeps(
         .fn<DocusignAdapter['listTemplates']>()
         .mockResolvedValue([TEMPLATE]),
     },
+    teamCountry: createStaticTeamCountryResolver(),
     ...overrides,
   };
 }
@@ -261,5 +263,68 @@ describe('SendContextService.getSendContext', () => {
     const result = await service.getSendContext('d-1');
 
     expect(result.capexCount).toBe(0);
+  });
+});
+
+describe('SendContextService.getSendContext — filtro de templates por userTeam', () => {
+  const TEMPLATES_BY_COUNTRY: TemplateSummary[] = [
+    { id: 'tpl-gt', name: 'GT - Acuerdo Comercial Guatemala' },
+    { id: 'tpl-cr', name: 'CR - Acuerdo comercial Costa Rica' },
+    { id: 'tpl-cr-2', name: 'cr - Adendum Costa Rica' },
+    { id: 'tpl-hn', name: 'HN - Acuerdo comercial Honduras' },
+    { id: 'tpl-generic', name: 'Contrato sin país' },
+  ];
+
+  function makeDepsWithTemplates(): SendContextServiceDeps {
+    return makeFakeDeps({
+      docusign: {
+        listTemplates: jest
+          .fn<DocusignAdapter['listTemplates']>()
+          .mockResolvedValue(TEMPLATES_BY_COUNTRY),
+      },
+    });
+  }
+
+  test('userTeam "Costa Rica" → solo templates con prefijo CR (case-insensitive)', async () => {
+    const service = createSendContextService(makeDepsWithTemplates());
+
+    const result = await service.getSendContext('d-1', 'Costa Rica');
+
+    expect(result.templates.map((t) => t.id)).toEqual(['tpl-cr', 'tpl-cr-2']);
+  });
+
+  test('userTeam con tildes y mayúsculas distintas hace match igual', async () => {
+    const service = createSendContextService(makeDepsWithTemplates());
+
+    const result = await service.getSendContext('d-1', 'república dominicana');
+
+    // RD no tiene templates en la lista → filtro aplicado, resultado vacío
+    expect(result.templates).toEqual([]);
+  });
+
+  test('userTeam "Guatemala" y "Belice" mapean ambos a GT', async () => {
+    const service = createSendContextService(makeDepsWithTemplates());
+
+    const porGuatemala = await service.getSendContext('d-1', 'Guatemala');
+    const porBelice = await service.getSendContext('d-1', 'Belice');
+
+    expect(porGuatemala.templates.map((t) => t.id)).toEqual(['tpl-gt']);
+    expect(porBelice.templates.map((t) => t.id)).toEqual(['tpl-gt']);
+  });
+
+  test('userTeam sin mapeo → devuelve todos los templates (sin filtro)', async () => {
+    const service = createSendContextService(makeDepsWithTemplates());
+
+    const result = await service.getSendContext('d-1', 'Equipo Desconocido');
+
+    expect(result.templates).toEqual(TEMPLATES_BY_COUNTRY);
+  });
+
+  test('sin userTeam → devuelve todos los templates', async () => {
+    const service = createSendContextService(makeDepsWithTemplates());
+
+    const result = await service.getSendContext('d-1');
+
+    expect(result.templates).toEqual(TEMPLATES_BY_COUNTRY);
   });
 });

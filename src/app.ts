@@ -15,6 +15,7 @@ import type { Env } from './config/env.js';
 import { createEnvTenantConfigProvider } from './lib/tenant-config/index.js';
 import { createStaticTemplateMappingResolver } from './lib/template-mapping/index.js';
 import { createStaticTemplateRolesResolver } from './lib/template-roles/index.js';
+import { createStaticTeamCountryResolver } from './lib/team-country/index.js';
 import { createHubSpotAdapter } from './integrations/HS/index.js';
 import { createHubSpotFilesAdapter } from './integrations/HS/hubspot-files.adapter.js';
 import { createDocusignAdapter } from './integrations/Docusign/index.js';
@@ -101,6 +102,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   const docusign = createDocusignAdapter(tenantConfig.docusign);
   const templateMapping = createStaticTemplateMappingResolver();
   const templateRoles = createStaticTemplateRolesResolver(env.TEMPLATE_PROVEEDOR_MAP);
+  const teamCountry = createStaticTeamCountryResolver();
 
   const templatesService = createTemplatesService({ docusign });
   const envelopesService = createEnvelopesService({
@@ -117,7 +119,7 @@ export async function buildApp(env: Env): Promise<FastifyInstance> {
   });
 
   const statusService = createEnvelopeStatusService({ hubspot });
-  const sendContextService = createSendContextService({ hubspot, docusign });
+  const sendContextService = createSendContextService({ hubspot, docusign, teamCountry });
 
   const templatesController = createTemplatesController(templatesService);
   const envelopesController = createEnvelopesController(envelopesService);
