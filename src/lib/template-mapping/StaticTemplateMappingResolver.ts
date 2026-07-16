@@ -13,7 +13,11 @@ export function createStaticTemplateMappingResolver(): TemplateMappingResolver {
   return {
     resolveTabValues(ctx: ResolutionContext): Record<string, string> {
       const tabs: Record<string, string> = {
-        country: ctx.contactoLegal?.pais ?? '',
+        // El tab country lleva la ubicación del request (location), que ya
+        // viene con el nombre completo del país ("Costa Rica"), no el código
+        // pais del contacto ("CR").
+        country: ctx.location ?? '',
+        company: ctx.company?.razonSocial ?? '',
         legalRepresentative: ctx.contactoLegal?.fullName ?? '',
         dniLegalRepresentative: ctx.contactoLegal?.dni ?? '',
         countryINVE: ctx.proveedorCountry ?? '',

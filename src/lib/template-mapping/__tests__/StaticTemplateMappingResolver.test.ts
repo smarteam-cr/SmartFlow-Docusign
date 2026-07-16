@@ -28,11 +28,12 @@ const baseCtx: ResolutionContext = {
 describe('createStaticTemplateMappingResolver', () => {
   const resolver = createStaticTemplateMappingResolver();
 
-  test('emite las 30 keys esperadas (10 fijas + 20 capex)', () => {
+  test('emite las 31 keys esperadas (11 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
       'Commercial_Agreement',
       'codeQR_1', 'codeQR_2', 'codeQR_3', 'codeQR_4', 'codeQR_5',
+      'company',
       'country',
       'countryINVE',
       'datetime',
@@ -48,11 +49,20 @@ describe('createStaticTemplateMappingResolver', () => {
     ].sort());
   });
 
-  test('mapea contactoLegal a legalRepresentative / dniLegalRepresentative / country', () => {
+  test('mapea contactoLegal a legalRepresentative / dniLegalRepresentative', () => {
     const r = resolver.resolveTabValues(baseCtx);
     expect(r.legalRepresentative).toBe('Ada Lovelace');
     expect(r.dniLegalRepresentative).toBe('CC-12345');
-    expect(r.country).toBe('Costa Rica');
+  });
+
+  test('el tab country lleva location (nombre completo), no el pais del contacto', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.country).toBe('San José, Zona Franca');
+  });
+
+  test('mapea company.razonSocial al tab company', () => {
+    const r = resolver.resolveTabValues(baseCtx);
+    expect(r.company).toBe('SIGMA ALIMENTOS');
   });
 
   test('mapea proveedorCountry a countryINVE', () => {
