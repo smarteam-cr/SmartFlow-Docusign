@@ -29,7 +29,7 @@ export interface SendFromTemplateInput {
   dniLegalRepresentative?: string;
   /** Fallback si el contacto de HubSpot no tiene country (país de origen del cliente). */
   country?: string;
-  /** Acuerdo comercial — se envía tal cual al tab Commercial_Agreement del template. */
+  /** Acuerdo comercial — se envía tal cual al tab commercialAgreement del template. */
   commercialAgreement?: string;
   /** Dirección fiscal de la empresa — se envía tal cual al tab direccionFiscal del template. */
   direccionFiscal?: string;

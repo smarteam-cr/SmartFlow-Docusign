@@ -22,7 +22,7 @@ export function createStaticTemplateMappingResolver(): TemplateMappingResolver {
         dniLegalRepresentative: ctx.contactoLegal?.dni ?? '',
         countryINVE: ctx.proveedorCountry ?? '',
         location: ctx.location ?? '',
-        Commercial_Agreement: ctx.commercialAgreement ?? '',
+        commercialAgreement: ctx.commercialAgreement ?? '',
         direccionFiscal: ctx.direccionFiscal ?? '',
         exclusiveUse: ctx.exclusiveUse ?? '',
         urlQuotation: ctx.quote?.hsQuoteLink ?? '',

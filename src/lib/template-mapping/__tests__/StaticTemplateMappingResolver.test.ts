@@ -31,8 +31,8 @@ describe('createStaticTemplateMappingResolver', () => {
   test('emite las 31 keys esperadas (11 fijas + 20 capex)', () => {
     const result = resolver.resolveTabValues(baseCtx);
     expect(Object.keys(result).sort()).toEqual([
-      'Commercial_Agreement',
       'codeQR_1', 'codeQR_2', 'codeQR_3', 'codeQR_4', 'codeQR_5',
+      'commercialAgreement',
       'company',
       'country',
       'countryINVE',
@@ -75,9 +75,9 @@ describe('createStaticTemplateMappingResolver', () => {
     expect(r.location).toBe('San José, Zona Franca');
   });
 
-  test('mapea commercialAgreement a Commercial_Agreement', () => {
+  test('mapea commercialAgreement tal cual (tab commercialAgreement del template)', () => {
     const r = resolver.resolveTabValues(baseCtx);
-    expect(r.Commercial_Agreement).toBe('Acuerdo Marco 2026');
+    expect(r.commercialAgreement).toBe('Acuerdo Marco 2026');
   });
 
   test('mapea direccionFiscal tal cual', () => {

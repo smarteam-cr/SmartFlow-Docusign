@@ -36,7 +36,7 @@ export interface ResolutionContext {
   proveedorCountry: string;
   /** Ubicación del cliente, viene tal cual del request body. */
   location: string;
-  /** Acuerdo comercial, viene tal cual del request body (tab Commercial_Agreement). */
+  /** Acuerdo comercial, viene tal cual del request body (tab commercialAgreement). */
   commercialAgreement: string;
   /** Dirección fiscal de la empresa, viene tal cual del request body (tab direccionFiscal). */
   direccionFiscal: string;
