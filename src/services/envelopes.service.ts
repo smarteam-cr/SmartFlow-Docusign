@@ -159,7 +159,9 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
-      const owner = await deps.hubspot.getDealOwner(input.dealId);
+      // El Deal debe tener owner asignado (guard existente → DEAL_OWNER_MISSING).
+      // Ya no firma: el rol CM sale de cmIdHubspotCode en TEMPLATE_PROVEEDOR_MAP.
+      await deps.hubspot.getDealOwner(input.dealId);
 
       const proveedorConfig = deps.templateRoles.getProveedorConfig(input.templateId);
       if (!proveedorConfig) {
@@ -179,6 +181,24 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         );
       }
 
+      const cmConfig = deps.templateRoles.getCmConfig(input.templateId);
+      if (!cmConfig) {
+        throw new ValidationError(
+          'CM_NOT_CONFIGURED',
+          `No hay CM configurado para el template ${input.templateId} (revisa cmIdHubspotCode en TEMPLATE_PROVEEDOR_MAP)`,
+          { templateId: input.templateId }
+        );
+      }
+
+      const cm = await deps.hubspot.getContactById(cmConfig.contactId);
+      if (!cm.email) {
+        throw new ValidationError(
+          'CM_EMAIL_MISSING',
+          `El contacto CM ${cm.id} no tiene email — DocuSign lo necesita para enviar`,
+          { templateId: input.templateId, contactId: cm.id }
+        );
+      }
+
       const cliente = await resolveCliente(deps.hubspot, chosen, input.dealId);
 
       const [company, capex, quote] = await Promise.all([
@@ -191,7 +211,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       selectDireccion(direcciones, input.directionId);
 
       assertUniqueRecipientEmails([
-        { role: 'Propietario', email: owner.email },
+        { role: 'CM', email: cm.email },
         { role: 'Proveedor', email: proveedor.email },
         { role: 'Cliente', email: cliente.email },
       ]);
@@ -241,31 +261,32 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
 
       const tabs = deps.templateMapping.resolveTabValues(ctx);
 
+      const cmName = `${cm.firstName} ${cm.lastName}`.trim();
       const proveedorName = `${proveedor.firstName} ${proveedor.lastName}`.trim();
       const clienteName = `${cliente.firstName} ${cliente.lastName}`.trim() || legalRepresentative;
 
       const { envelopeId, status } = await deps.docusign.sendEnvelopeFromTemplate({
         templateId: input.templateId,
         roles: [
-         /* {
-            roleName: 'Propietario',
-            name: owner.name,
-            email: owner.email,
+          {
+            roleName: 'CM',
+            name: cmName,
+            email: cm.email,
             routingOrder: 1,
             tabs,
-          },*/
+          },
           {
             roleName: 'Proveedor',
             name: proveedorName,
             email: proveedor.email,
-            routingOrder: 1,
+            routingOrder: 2,
             tabs,
           },
           {
             roleName: 'Cliente',
             name: clienteName,
             email: cliente.email,
-            routingOrder: 2,
+            routingOrder: 3,
           },
         ],
         customFields: {
@@ -284,8 +305,8 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
 
       await deps.hubspot.createNoteForDeal({
         dealId: input.dealId,
-        body: `<p>Enviado para firma. Envelope: ${envelopeId}. Firmantes: ${owner.name} → ${proveedorName} → ${clienteName}</p>`,
-        contactIds: [proveedor.id, cliente.id],
+        body: `<p>Enviado para firma. Envelope: ${envelopeId}. Firmantes: ${cmName} → ${proveedorName} → ${clienteName}</p>`,
+        contactIds: [cm.id, proveedor.id, cliente.id],
       });
 
       return {

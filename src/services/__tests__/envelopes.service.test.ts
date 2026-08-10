@@ -78,6 +78,34 @@ const proveedorContact: Contact = {
   pais: '',
 };
 
+const cmContact: Contact = {
+  id: 'c-cm',
+  firstName: 'Laura',
+  lastName: 'Managera',
+  email: 'laura@empresa.co',
+  docIdentificacion: '',
+  pais: '',
+};
+
+/**
+ * getContactById resuelto por id (proveedor, CM y los extra que pase el test).
+ * Evita depender del orden de las llamadas dentro del service.
+ */
+function makeGetContactById(extra: Contact[] = []) {
+  const all = [proveedorContact, cmContact, ...extra];
+  return jest.fn<HubSpotAdapter['getContactById']>(async (contactId: string) => {
+    const found = all.find((c) => c.id === contactId);
+    if (!found) {
+      throw new ValidationError(
+        'PROVEEDOR_CONTACT_NOT_FOUND',
+        `no existe ${contactId}`,
+        undefined
+      );
+    }
+    return found;
+  });
+}
+
 function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapter {
   const fake: HubSpotAdapter = {
     getDealContacts: jest
@@ -86,9 +114,7 @@ function makeFakeHubspot(overrides: Partial<HubSpotAdapter> = {}): HubSpotAdapte
     getDealOwner: jest
       .fn<HubSpotAdapter['getDealOwner']>()
       .mockResolvedValue(dealOwner),
-    getContactById: jest
-      .fn<HubSpotAdapter['getContactById']>()
-      .mockResolvedValue(proveedorContact),
+    getContactById: makeGetContactById(),
     findJuridicoContactIds: jest
       .fn<HubSpotAdapter['findJuridicoContactIds']>()
       .mockResolvedValue([]),
@@ -172,12 +198,15 @@ function makeFakeTemplateRoles(
     getProveedorConfig: jest
       .fn<TemplateRolesResolver['getProveedorConfig']>()
       .mockReturnValue({ contactId: 'c-proveedor', country: 'España' }),
+    getCmConfig: jest
+      .fn<TemplateRolesResolver['getCmConfig']>()
+      .mockReturnValue({ contactId: 'c-cm' }),
     ...overrides,
   };
 }
 
 describe('envelopes.service — happy paths', () => {
-  test('2 firmantes Proveedor→Cliente, tabs solo en Proveedor, fallback al contactId del request cuando no hay jurídico', async () => {
+  test('3 firmantes CM→Proveedor→Cliente, tabs en CM y Proveedor, fallback al contactId del request cuando no hay jurídico', async () => {
     const hubspot = makeFakeHubspot();
     const docusign = makeFakeDocusign();
     const templateMapping = makeFakeMapping();
@@ -208,6 +237,8 @@ describe('envelopes.service — happy paths', () => {
     expect(hubspot.getDealLatestQuote).toHaveBeenCalledWith('12345');
     expect(hubspot.getCompanyDirecciones).toHaveBeenCalledWith('co-1');
     expect(templateRoles.getProveedorConfig).toHaveBeenCalledWith('tpl-abc');
+    expect(templateRoles.getCmConfig).toHaveBeenCalledWith('tpl-abc');
+    expect(hubspot.getContactById).toHaveBeenCalledWith('c-cm');
 
     expect(templateMapping.resolveTabValues).toHaveBeenCalledWith({
       templateId: 'tpl-abc',
@@ -231,17 +262,24 @@ describe('envelopes.service — happy paths', () => {
       templateId: 'tpl-abc',
       roles: [
         {
+          roleName: 'CM',
+          name: 'Laura Managera',
+          email: 'laura@empresa.co',
+          routingOrder: 1,
+          tabs: stubResolvedTabs,
+        },
+        {
           roleName: 'Proveedor',
           name: 'María Gómez',
           email: 'maria@proveedor.co',
-          routingOrder: 1,
+          routingOrder: 2,
           tabs: stubResolvedTabs,
         },
         {
           roleName: 'Cliente',
           name: 'Ada Lovelace',
           email: 'ada@math.org',
-          routingOrder: 2,
+          routingOrder: 3,
         },
       ],
       customFields: {
@@ -257,7 +295,7 @@ describe('envelopes.service — happy paths', () => {
 
     expect(hubspot.createNoteForDeal).toHaveBeenCalledWith(expect.objectContaining({
       dealId: '12345',
-      contactIds: ['c-proveedor', 'c-ada'],
+      contactIds: ['c-cm', 'c-proveedor', 'c-ada'],
     }));
   });
 
@@ -282,6 +320,8 @@ describe('envelopes.service — happy paths', () => {
       .calls[0]![0] as { roles: Array<{ roleName: string; tabs?: Record<string, string> }> };
     const proveedor = call.roles.find((r) => r.roleName === 'Proveedor');
     expect(proveedor?.tabs?.urlQuotation).toBe('https://hubspot.com/q1');
+    const cm = call.roles.find((r) => r.roleName === 'CM');
+    expect(cm?.tabs?.urlQuotation).toBe('https://hubspot.com/q1');
     const cliente = call.roles.find((r) => r.roleName === 'Cliente');
     expect(cliente?.tabs).toBeUndefined();
   });
@@ -299,11 +339,7 @@ describe('envelopes.service — happy paths', () => {
       findJuridicoContactIds: jest
         .fn<HubSpotAdapter['findJuridicoContactIds']>()
         .mockResolvedValue(['c-juridico']),
-      getContactById: jest
-        .fn<HubSpotAdapter['getContactById']>()
-        // Proveedor lookup first, then juridico lookup
-        .mockResolvedValueOnce(proveedorContact)
-        .mockResolvedValueOnce(juridico),
+      getContactById: makeGetContactById([juridico]),
     });
     const docusign = makeFakeDocusign();
     const service = createEnvelopesService({
@@ -684,10 +720,7 @@ describe('envelopes.service — errores estructurales', () => {
       findJuridicoContactIds: jest
         .fn<HubSpotAdapter['findJuridicoContactIds']>()
         .mockResolvedValue(['c-juridico']),
-      getContactById: jest
-        .fn<HubSpotAdapter['getContactById']>()
-        .mockResolvedValueOnce(proveedorContact)
-        .mockResolvedValueOnce(juridicoSinEmail),
+      getContactById: makeGetContactById([juridicoSinEmail]),
     });
     const service = createEnvelopesService({
       hubspot,
@@ -797,17 +830,92 @@ describe('envelopes.service — errores estructurales', () => {
     expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
   });
 
-  test('DUPLICATE_RECIPIENT_EMAIL cuando Propietario y Cliente comparten email', async () => {
+  test('CM_NOT_CONFIGURED cuando el template no tiene cmIdHubspotCode', async () => {
+    const templateRoles = makeFakeTemplateRoles({
+      getCmConfig: jest
+        .fn<TemplateRolesResolver['getCmConfig']>()
+        .mockReturnValue(undefined),
+    });
+    const docusign = makeFakeDocusign();
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign,
+      templateMapping: makeFakeMapping(),
+      templateRoles,
+      portalId: 'portal-1',
+    });
+    await expect(
+      service.sendFromTemplate({
+        dealId: '12345',
+        templateId: 'tpl-sin-cm',
+        contactId: 'c-ada',
+      })
+    ).rejects.toMatchObject({ code: 'CM_NOT_CONFIGURED', httpStatus: 422 });
+    expect(docusign.sendEnvelopeFromTemplate).not.toHaveBeenCalled();
+  });
+
+  test('CM_EMAIL_MISSING cuando el contacto CM no tiene email', async () => {
+    const cmSinEmail: Contact = {
+      id: 'c-cm-sin-email',
+      firstName: 'Laura',
+      lastName: 'M',
+      email: '',
+      docIdentificacion: '',
+      pais: '',
+    };
     const hubspot = makeFakeHubspot({
-      getDealOwner: jest
-        .fn<HubSpotAdapter['getDealOwner']>()
-        .mockResolvedValue({ id: 'o-1', name: 'C', email: 'ADA@math.org' }),
+      getContactById: makeGetContactById([cmSinEmail]),
+    });
+    const templateRoles = makeFakeTemplateRoles({
+      getCmConfig: jest
+        .fn<TemplateRolesResolver['getCmConfig']>()
+        .mockReturnValue({ contactId: 'c-cm-sin-email' }),
     });
     const service = createEnvelopesService({
       hubspot,
       docusign: makeFakeDocusign(),
       templateMapping: makeFakeMapping(),
-      templateRoles: makeFakeTemplateRoles(),
+      templateRoles,
+      portalId: 'portal-1',
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'CM_EMAIL_MISSING', httpStatus: 422 });
+  });
+
+  test('PROVEEDOR_CONTACT_NOT_FOUND propagado cuando el cmIdHubspotCode no existe en HubSpot', async () => {
+    const templateRoles = makeFakeTemplateRoles({
+      getCmConfig: jest
+        .fn<TemplateRolesResolver['getCmConfig']>()
+        .mockReturnValue({ contactId: 'c-fantasma' }),
+    });
+    const service = createEnvelopesService({
+      hubspot: makeFakeHubspot(),
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles,
+      portalId: 'portal-1',
+    });
+    await expect(
+      service.sendFromTemplate({ dealId: '12345', templateId: 'tpl', contactId: 'c-ada' })
+    ).rejects.toMatchObject({ code: 'PROVEEDOR_CONTACT_NOT_FOUND', httpStatus: 422 });
+  });
+
+  test('DUPLICATE_RECIPIENT_EMAIL cuando CM y Cliente comparten email', async () => {
+    const cmDuplicado: Contact = { ...cmContact, id: 'c-cm-dup', email: 'ADA@math.org' };
+    const hubspot = makeFakeHubspot({
+      getContactById: makeGetContactById([cmDuplicado]),
+    });
+    const templateRoles = makeFakeTemplateRoles({
+      getCmConfig: jest
+        .fn<TemplateRolesResolver['getCmConfig']>()
+        .mockReturnValue({ contactId: 'c-cm-dup' }),
+    });
+    const service = createEnvelopesService({
+      hubspot,
+      docusign: makeFakeDocusign(),
+      templateMapping: makeFakeMapping(),
+      templateRoles,
       portalId: 'portal-1',
     });
 

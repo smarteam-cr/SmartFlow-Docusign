@@ -60,7 +60,7 @@ Copia `.env.example` a `.env` y rellena los valores (las credenciales **no** se 
 | `DOCUSIGN_PRIVATE_KEY` | Clave RSA en una sola línea con `\n` literales |
 | `DOCUSIGN_ACCOUNT_ID` | ID de la cuenta DocuSign |
 | `DOCUSIGN_BASE_PATH` | `https://demo.docusign.net` (sandbox) / `https://www.docusign.net` (prod) |
-| `TEMPLATE_PROVEEDOR_MAP` | JSON `{ "<templateId>": "<hs-contactId del proveedor>" }` |
+| `TEMPLATE_PROVEEDOR_MAP` | Array JSON `[{ "id": "<templateId>", "country": "<país proveedor>", "legalRepresentativeCode": "<hs-contactId del proveedor>", "cmIdHubspotCode": "<hs-contactId del CM>" }]` |
 | `DOCUSIGN_CONNECT_HMAC_SECRET` | Secreto HMAC para verificar el webhook de DocuSign Connect |
 
 > El server **no arranca** si falta una variable crítica: `zod` valida `process.env` al boot y muere con un mensaje claro.

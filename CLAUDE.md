@@ -219,7 +219,8 @@ DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_BASE_PATH=https://demo.docusign.net
 
 # Config de proveedores por template (array JSON):
-# [{"id":"<template-uuid>","country":"<país proveedor / tab countryINVE>","legalRepresentativeCode":"<hs-contact-id>"}]
+# [{"id":"<template-uuid>","country":"<país proveedor / tab countryINVE>","legalRepresentativeCode":"<hs-contact-id>","cmIdHubspotCode":"<hs-contact-id del CM>"}]
+# cmIdHubspotCode alimenta el rol CM (routingOrder 1). Vacío → 422 CM_NOT_CONFIGURED al enviar.
 TEMPLATE_PROVEEDOR_MAP=[]
 
 # DocuSign Connect webhook HMAC secret (generado por DocuSign Admin → Connect → Gestionar claves)
