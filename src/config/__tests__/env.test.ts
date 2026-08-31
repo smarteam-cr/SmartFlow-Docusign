@@ -11,7 +11,7 @@ describe('parseEnv', () => {
     DOCUSIGN_PRIVATE_KEY: '-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----',
     DOCUSIGN_ACCOUNT_ID: 'account-1',
     DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
-    TEMPLATE_PROVEEDOR_MAP: '{"82c6188c-f743-4bba-a762-49ae72d9aafe":"contact-id-123"}',
+    HUBSPOT_PARAMETROS_DC_OBJECT_TYPE: '2-68469940',
     DOCUSIGN_CONNECT_HMAC_SECRET: 'my-hmac-secret',
     HUBSPOT_PORTAL_ID: '12345678',
   };
@@ -51,8 +51,8 @@ describe('parseEnv', () => {
     ).toThrow();
   });
 
-  test('throws when TEMPLATE_PROVEEDOR_MAP is missing', () => {
-    const { TEMPLATE_PROVEEDOR_MAP: _omit, ...rest } = validEnv;
+  test('throws when HUBSPOT_PARAMETROS_DC_OBJECT_TYPE is missing', () => {
+    const { HUBSPOT_PARAMETROS_DC_OBJECT_TYPE: _omit, ...rest } = validEnv;
     expect(() => parseEnv(rest)).toThrow();
   });
 

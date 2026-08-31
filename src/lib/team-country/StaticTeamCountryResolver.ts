@@ -25,6 +25,20 @@ export const COUNTRY_FULL_NAME_MAP: CountryFullNameMap = {
   RD: 'Republica Dominicana',
 };
 
+/**
+ * Configuración editable: alias de país → nombre canónico.
+ *
+ * La propiedad `pais` del objeto "Parametros DC" de HubSpot desdobla algunos
+ * países en varias filas ("Guatemala IV", "Guatemala QST") porque cada una
+ * apunta a un template distinto. Ese valor alimenta el tab `countryINVE` del
+ * documento, así que hay que colapsarlo al nombre real del país antes de
+ * imprimirlo. La clave se compara normalizada (mayúsculas, sin tildes).
+ */
+export const COUNTRY_ALIAS_MAP: Record<string, string> = {
+  'GUATEMALA IV': 'Guatemala',
+  'GUATEMALA QST': 'Guatemala',
+};
+
 /** Uppercase + trim + sin tildes, para comparar con tolerancia. */
 function normalize(value: string): string {
   return value
@@ -58,4 +72,17 @@ export function createStaticTeamCountryResolver(
       return codeToFullName.get(normalize(code)) ?? null;
     },
   };
+}
+
+/**
+ * Colapsa un nombre de país a su forma canónica usando COUNTRY_ALIAS_MAP.
+ * Si no hay alias, devuelve el valor recortado tal cual (nunca inventa).
+ */
+export function normalizeCountryName(
+  raw: string,
+  aliases: Record<string, string> = COUNTRY_ALIAS_MAP
+): string {
+  const trimmed = raw.trim();
+  if (trimmed === '') return '';
+  return aliases[normalize(trimmed)] ?? trimmed;
 }

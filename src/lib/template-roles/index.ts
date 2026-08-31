@@ -1,6 +1,1 @@
-export type {
-  CmTemplateConfig,
-  ProveedorTemplateConfig,
-  TemplateRolesResolver,
-} from './types.js';
-export { createStaticTemplateRolesResolver } from './StaticTemplateRolesResolver.js';
+export type { TemplateRolesConfig, TemplateRolesResolver } from './types.js';

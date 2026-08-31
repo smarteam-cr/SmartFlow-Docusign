@@ -14,7 +14,12 @@ const envSchema = z.object({
   DOCUSIGN_ACCOUNT_ID: z.string().min(1, 'DOCUSIGN_ACCOUNT_ID is required'),
   DOCUSIGN_BASE_PATH: z.string().min(1, 'DOCUSIGN_BASE_PATH is required'),
 
-  TEMPLATE_PROVEEDOR_MAP: z.string().min(1, 'TEMPLATE_PROVEEDOR_MAP is required'),
+  // objectTypeId del objeto personalizado "Parametros DC" de HubSpot, que
+  // sustituyó a TEMPLATE_PROVEEDOR_MAP. Es específico de cada portal, así que
+  // no puede ir hardcodeado: al cambiar de portal cambia el id.
+  HUBSPOT_PARAMETROS_DC_OBJECT_TYPE: z
+    .string()
+    .regex(/^2-\d+$/, 'HUBSPOT_PARAMETROS_DC_OBJECT_TYPE must look like "2-12345678"'),
 
   DOCUSIGN_CONNECT_HMAC_SECRET: z.string().min(1, 'DOCUSIGN_CONNECT_HMAC_SECRET is required'),
   HUBSPOT_PORTAL_ID: z.string().min(1, 'HUBSPOT_PORTAL_ID is required'),

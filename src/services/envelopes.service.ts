@@ -105,6 +105,43 @@ function selectDireccion(
   return direcciones[0] ?? null;
 }
 
+/**
+ * Resuelve uno de los firmantes fijos configurados en la fila de "Parametros
+ * DC": Proveedor, CM y Legal funcionan igual — la fila guarda un contactId de
+ * HubSpot del que se sacan nombre y email.
+ */
+async function resolveConfiguredSigner(
+  hubspot: HubSpotAdapter,
+  params: {
+    role: string;
+    /** Propiedad de "Parametros DC" de la que sale el contactId. */
+    property: string;
+    contactId: string;
+    notConfiguredCode: string;
+    emailMissingCode: string;
+    templateId: string;
+    recordId: string;
+  }
+): Promise<Contact> {
+  if (params.contactId.trim() === '') {
+    throw new ValidationError(
+      params.notConfiguredCode,
+      `La fila ${params.recordId} de "Parametros DC" no tiene ${params.property} — es el rol ${params.role} del contrato`,
+      { templateId: params.templateId, recordId: params.recordId, property: params.property }
+    );
+  }
+
+  const contact = await hubspot.getContactById(params.contactId.trim());
+  if (!contact.email) {
+    throw new ValidationError(
+      params.emailMissingCode,
+      `El contacto ${params.role} ${contact.id} no tiene email — DocuSign lo necesita para enviar`,
+      { templateId: params.templateId, contactId: contact.id }
+    );
+  }
+  return contact;
+}
+
 function assertUniqueRecipientEmails(emails: Array<{ role: string; email: string }>): void {
   const seen = new Map<string, string>();
   for (const { role, email } of emails) {
@@ -160,44 +197,51 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       }
 
       // El Deal debe tener owner asignado (guard existente → DEAL_OWNER_MISSING).
-      // Ya no firma: el rol CM sale de cmIdHubspotCode en TEMPLATE_PROVEEDOR_MAP.
+      // El owner ya no firma: el primer firmante es el Supervisor del Deal.
       await deps.hubspot.getDealOwner(input.dealId);
 
-      const proveedorConfig = deps.templateRoles.getProveedorConfig(input.templateId);
-      if (!proveedorConfig) {
+      // Supervisor (routingOrder 1): propiedad `supervisor` del Deal, de tipo
+      // "Usuario de HubSpot", así que es un ownerId — no un contacto.
+      const supervisor = await deps.hubspot.getDealSupervisor(input.dealId);
+
+      const rolesConfig = await deps.templateRoles.getConfig(input.templateId);
+      if (!rolesConfig) {
         throw new ValidationError(
           'PROVEEDOR_NOT_CONFIGURED',
-          `No hay proveedor configurado para el template ${input.templateId} (revisa TEMPLATE_PROVEEDOR_MAP)`,
+          `No hay fila en "Parametros DC" para el template ${input.templateId}`,
           { templateId: input.templateId }
         );
       }
 
-      const proveedor = await deps.hubspot.getContactById(proveedorConfig.contactId);
-      if (!proveedor.email) {
-        throw new ValidationError(
-          'PROVEEDOR_EMAIL_MISSING',
-          `El contacto proveedor ${proveedor.id} no tiene email — DocuSign lo necesita para enviar`,
-          { templateId: input.templateId, contactId: proveedor.id }
-        );
-      }
+      const proveedor = await resolveConfiguredSigner(deps.hubspot, {
+        role: 'Proveedor',
+        property: 'legal_representative_code',
+        contactId: rolesConfig.proveedorContactId,
+        notConfiguredCode: 'PROVEEDOR_NOT_CONFIGURED',
+        emailMissingCode: 'PROVEEDOR_EMAIL_MISSING',
+        templateId: input.templateId,
+        recordId: rolesConfig.recordId,
+      });
 
-      const cmConfig = deps.templateRoles.getCmConfig(input.templateId);
-      if (!cmConfig) {
-        throw new ValidationError(
-          'CM_NOT_CONFIGURED',
-          `No hay CM configurado para el template ${input.templateId} (revisa cmIdHubspotCode en TEMPLATE_PROVEEDOR_MAP)`,
-          { templateId: input.templateId }
-        );
-      }
+      const cm = await resolveConfiguredSigner(deps.hubspot, {
+        role: 'CM',
+        property: 'cm_id_hubspot_code',
+        contactId: rolesConfig.cmContactId,
+        notConfiguredCode: 'CM_NOT_CONFIGURED',
+        emailMissingCode: 'CM_EMAIL_MISSING',
+        templateId: input.templateId,
+        recordId: rolesConfig.recordId,
+      });
 
-      const cm = await deps.hubspot.getContactById(cmConfig.contactId);
-      if (!cm.email) {
-        throw new ValidationError(
-          'CM_EMAIL_MISSING',
-          `El contacto CM ${cm.id} no tiene email — DocuSign lo necesita para enviar`,
-          { templateId: input.templateId, contactId: cm.id }
-        );
-      }
+      const legal = await resolveConfiguredSigner(deps.hubspot, {
+        role: 'Legal',
+        property: 'usuario_legal',
+        contactId: rolesConfig.legalContactId,
+        notConfiguredCode: 'LEGAL_NOT_CONFIGURED',
+        emailMissingCode: 'LEGAL_EMAIL_MISSING',
+        templateId: input.templateId,
+        recordId: rolesConfig.recordId,
+      });
 
       const cliente = await resolveCliente(deps.hubspot, chosen, input.dealId);
 
@@ -211,7 +255,9 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       selectDireccion(direcciones, input.directionId);
 
       assertUniqueRecipientEmails([
+        { role: 'Supervisor', email: supervisor.email },
         { role: 'CM', email: cm.email },
+        { role: 'Legal', email: legal.email },
         { role: 'Proveedor', email: proveedor.email },
         { role: 'Cliente', email: cliente.email },
       ]);
@@ -244,7 +290,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
           dni: dniLegalRepresentative,
           pais: cliente.pais || input.country?.trim() || '',
         },
-        proveedorCountry: proveedorConfig.country,
+        proveedorCountry: rolesConfig.country,
         location: input.location ?? '',
         commercialAgreement: input.commercialAgreement ?? '',
         direccionFiscal: input.direccionFiscal ?? '',
@@ -262,6 +308,7 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
       const tabs = deps.templateMapping.resolveTabValues(ctx);
 
       const cmName = `${cm.firstName} ${cm.lastName}`.trim();
+      const legalName = `${legal.firstName} ${legal.lastName}`.trim();
       const proveedorName = `${proveedor.firstName} ${proveedor.lastName}`.trim();
       const clienteName = `${cliente.firstName} ${cliente.lastName}`.trim() || legalRepresentative;
 
@@ -269,24 +316,36 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
         templateId: input.templateId,
         roles: [
           {
+            roleName: 'Supervisor',
+            name: supervisor.name,
+            email: supervisor.email,
+            routingOrder: 1,
+          },
+          {
             roleName: 'CM',
             name: cmName,
             email: cm.email,
-            routingOrder: 1,
+            routingOrder: 2,
             tabs,
+          },
+          {
+            roleName: 'Legal',
+            name: legalName,
+            email: legal.email,
+            routingOrder: 3,
           },
           {
             roleName: 'Proveedor',
             name: proveedorName,
             email: proveedor.email,
-            routingOrder: 2,
+            routingOrder: 4,
             tabs,
           },
           {
             roleName: 'Cliente',
             name: clienteName,
             email: cliente.email,
-            routingOrder: 3,
+            routingOrder: 5,
           },
         ],
         customFields: {
@@ -305,8 +364,8 @@ export function createEnvelopesService(deps: EnvelopesServiceDeps): EnvelopesSer
 
       await deps.hubspot.createNoteForDeal({
         dealId: input.dealId,
-        body: `<p>Enviado para firma. Envelope: ${envelopeId}. Firmantes: ${cmName} → ${proveedorName} → ${clienteName}</p>`,
-        contactIds: [cm.id, proveedor.id, cliente.id],
+        body: `<p>Enviado para firma. Envelope: ${envelopeId}. Firmantes: ${supervisor.name} → ${cmName} → ${legalName} → ${proveedorName} → ${clienteName}</p>`,
+        contactIds: [cm.id, legal.id, proveedor.id, cliente.id],
       });
 
       return {

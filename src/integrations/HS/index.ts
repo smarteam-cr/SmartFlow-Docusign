@@ -7,6 +7,7 @@ export type {
   Capex,
   Direccion,
   Quote,
+  ParametrosDc,
 } from './hubspot.adapter.js';
 export { createHubSpotAdapter } from './hubspot.adapter.js';
 
@@ -15,3 +16,5 @@ export type {
   HubSpotFilesAdapterConfig,
 } from './hubspot-files.adapter.js';
 export { createHubSpotFilesAdapter } from './hubspot-files.adapter.js';
+
+export { createHubSpotTemplateRolesResolver } from './hubspot-template-roles.resolver.js';

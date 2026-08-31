@@ -1,6 +1,7 @@
 import { describe, expect, test } from '@jest/globals';
 import {
   createStaticTeamCountryResolver,
+  normalizeCountryName,
   TEAM_COUNTRY_MAP,
 } from '../StaticTeamCountryResolver.js';
 
@@ -62,5 +63,29 @@ describe('createStaticTeamCountryResolver', () => {
       expect(resolver.resolveCountryFullName('PA')).toBeNull();
       expect(resolver.resolveCountryFullName('')).toBeNull();
     });
+  });
+});
+
+describe('normalizeCountryName', () => {
+  test('colapsa los desdobles de Guatemala del objeto "Parametros DC"', () => {
+    expect(normalizeCountryName('Guatemala IV')).toBe('Guatemala');
+    expect(normalizeCountryName('Guatemala QST')).toBe('Guatemala');
+  });
+
+  test('compara sin distinguir mayúsculas ni espacios sobrantes', () => {
+    expect(normalizeCountryName('  guatemala qst  ')).toBe('Guatemala');
+  });
+
+  test('devuelve el valor tal cual cuando no hay alias', () => {
+    expect(normalizeCountryName('Costa Rica')).toBe('Costa Rica');
+    expect(normalizeCountryName('Republica Dominicana')).toBe('Republica Dominicana');
+  });
+
+  test('string vacío devuelve string vacío', () => {
+    expect(normalizeCountryName('   ')).toBe('');
+  });
+
+  test('acepta un mapa de alias propio', () => {
+    expect(normalizeCountryName('Panamá Norte', { 'PANAMA NORTE': 'Panamá' })).toBe('Panamá');
   });
 });

@@ -30,7 +30,7 @@ empresa, el dueño del Deal, la cotización y los capex pre-rellenados en el doc
 | Auth DocuSign | JWT Grant (`jsonwebtoken`) |
 | Logger | `pino` (integrado en Fastify) |
 | HTTP client | `fetch` nativo (Node ≥18) con `AbortController` |
-| Tests | Jest + ts-jest (166 tests) |
+| Tests | Jest + ts-jest (222 tests) |
 
 ---
 
@@ -60,7 +60,7 @@ Copia `.env.example` a `.env` y rellena los valores (las credenciales **no** se 
 | `DOCUSIGN_PRIVATE_KEY` | Clave RSA en una sola línea con `\n` literales |
 | `DOCUSIGN_ACCOUNT_ID` | ID de la cuenta DocuSign |
 | `DOCUSIGN_BASE_PATH` | `https://demo.docusign.net` (sandbox) / `https://www.docusign.net` (prod) |
-| `TEMPLATE_PROVEEDOR_MAP` | Array JSON `[{ "id": "<templateId>", "country": "<país proveedor>", "legalRepresentativeCode": "<hs-contactId del proveedor>", "cmIdHubspotCode": "<hs-contactId del CM>" }]` |
+| `HUBSPOT_PARAMETROS_DC_OBJECT_TYPE` | `objectTypeId` del objeto personalizado **Parametros DC** de HubSpot (ej. `2-68469940`), donde vive la configuración de firmantes por template. Reemplazó a `TEMPLATE_PROVEEDOR_MAP` |
 | `DOCUSIGN_CONNECT_HMAC_SECRET` | Secreto HMAC para verificar el webhook de DocuSign Connect |
 
 > El server **no arranca** si falta una variable crítica: `zod` valida `process.env` al boot y muere con un mensaje claro.
@@ -69,7 +69,7 @@ Copia `.env.example` a `.env` y rellena los valores (las credenciales **no** se 
 ```bash
 npm run dev        # desarrollo con recarga (tsx watch)
 npm run typecheck  # chequeo de tipos (obligatorio antes de commit)
-npm test           # 166 tests unitarios
+npm test           # 222 tests unitarios
 npm run build      # compila a dist/
 npm start          # corre dist/server.js (producción)
 ```
@@ -116,6 +116,25 @@ Los services reciben los adapters por DI; nunca hacen `import` de `integrations/
 | `POST` | `/webhooks/docusign` | Receptor de DocuSign Connect (HMAC verificado) |
 | `GET` | `/health` | Health check (sin auth) — **fuera** del prefijo `/api/v1` |
 
+### Firmantes del envelope (5 roles, en orden de firma)
+
+| # | `roleName` DocuSign | De dónde sale | Tabs pre-rellenados |
+|---|---|---|---|
+| 1 | `Supervisor` | Propiedad `supervisor` del Deal (tipo *Usuario de HubSpot* → `ownerId`) | no |
+| 2 | `CM` | `cm_id_hubspot_code` de Parametros DC (contactId) | sí |
+| 3 | `Legal` | `usuario_legal` de Parametros DC (contactId) | no |
+| 4 | `Proveedor` | `legal_representative_code` de Parametros DC (contactId) | sí |
+| 5 | `Cliente` | Contacto jurídico del Deal, o el `contactId` del request | no |
+
+La fila de **Parametros DC** se busca por la propiedad `template`, cuyo *value*
+es el templateId de DocuSign. `pais` alimenta el tab `countryINVE`, colapsando
+los desdobles (`Guatemala IV` / `Guatemala QST` → `Guatemala`) según
+`COUNTRY_ALIAS_MAP` en `src/lib/team-country/`.
+
+Dos firmantes no pueden compartir email: el envío falla con `422
+DUPLICATE_RECIPIENT_EMAIL`.
+
+
 ### Probar el webhook en local (sin ngrok)
 Tras firmar el primer firmante, simula el evento de DocuSign Connect contra `localhost`:
 ver `../script-to-completed.txt` en la carpeta del workspace.
@@ -136,7 +155,7 @@ ver `../script-to-completed.txt` en la carpeta del workspace.
 **Riesgos / deuda consciente**
 - Sin reintentos ante fallos transitorios de HubSpot/DocuSign (solo timeouts: 10s HubSpot, 15s DocuSign).
 - Solo tests unitarios (adapters falsos por DI); no hay E2E automatizado.
-- `TEMPLATE_PROVEEDOR_MAP` y los mappings de campos son estáticos (hardcoded por env); pasarán a BD por tenant.
+- Los mappings de campos siguen hardcodeados en `src/lib/template-mapping/`; la config de firmantes ya salió del env y vive en HubSpot.
 
 **Dependencias con terceros**
 - HubSpot CRM API, DocuSign eSign API y DocuSign Connect (webhook). Cualquier cambio de sus contratos

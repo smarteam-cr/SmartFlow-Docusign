@@ -11,7 +11,7 @@ const sampleEnv: Env = {
   DOCUSIGN_PRIVATE_KEY: '-----BEGIN RSA-----\nkey\n-----END RSA-----',
   DOCUSIGN_ACCOUNT_ID: 'account-id',
   DOCUSIGN_BASE_PATH: 'https://demo.docusign.net',
-  TEMPLATE_PROVEEDOR_MAP: '{}',
+  HUBSPOT_PARAMETROS_DC_OBJECT_TYPE: '2-68469940',
   DOCUSIGN_CONNECT_HMAC_SECRET: 'hmac-secret',
   HUBSPOT_PORTAL_ID: '12345678',
 };
@@ -20,7 +20,10 @@ describe('createEnvTenantConfigProvider', () => {
   test('maps env to TenantConfig.hubspot', () => {
     const provider = createEnvTenantConfigProvider(sampleEnv);
     const cfg = provider.getConfig();
-    expect(cfg.hubspot.accessToken).toBe('pat-na1-token');
+    expect(cfg.hubspot).toEqual({
+      accessToken: 'pat-na1-token',
+      parametrosDcObjectType: '2-68469940',
+    });
   });
 
   test('maps env to TenantConfig.docusign', () => {

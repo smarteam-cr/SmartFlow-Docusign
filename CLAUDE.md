@@ -51,13 +51,15 @@ src/
 ├── controllers/               ← parsea/valida HTTP, llama service, formatea respuesta
 ├── services/                  ← casos de uso: orquestan adapters, lógica de negocio (sin HTTP)
 ├── integrations/              ← adapters a APIs externas (uno por integración)
-│   ├── HS/                    ← HubSpot CRM
+│   ├── HS/                    ← HubSpot CRM + hubspot-template-roles.resolver.ts
 │   └── Docusign/              ← DocuSign eSign + JWT auth
 ├── middlewares/               ← errorHandler global, request logger, etc.
 ├── lib/                       ← errores, ports, logger, abstracciones compartidas
 │   ├── errors/                ← AppError + jerarquía
 │   ├── tenant-config/         ← TenantConfigProvider port + EnvTenantConfigProvider
 │   ├── template-mapping/      ← TemplateMappingResolver port + StaticTemplateMappingResolver
+│   ├── template-roles/        ← TemplateRolesResolver port (solo el contrato; la
+│   │                            implementación vive en integrations/HS porque lee HubSpot)
 │   └── team-country/          ← TeamCountryResolver port + mapa equipo HubSpot → código de país (editable)
 ├── db/
 │   └── models/                ← Mongoose models (vacío hoy, listo para Roadmap §15.2)
@@ -119,7 +121,7 @@ export function createEnvelopesService(deps: {
   hubspot: HubSpotAdapter;
   docusign: DocusignAdapter;
   templateMapping: TemplateMappingResolver;
-  templateRoles: TemplateRolesResolver;
+  templateRoles: TemplateRolesResolver;  // respaldado por el objeto "Parametros DC" de HubSpot
 }) {
   return {
     async sendFromTemplate(input: { dealId: string; templateId: string; contactId: string; directionId?: string }) { /* ... */ }
@@ -134,6 +136,7 @@ const tenantConfig    = createEnvTenantConfigProvider(env).getConfig();
 const hubspot         = createHubSpotAdapter(tenantConfig.hubspot);
 const docusign        = createDocusignAdapter(tenantConfig.docusign);
 const templateMapping = createStaticTemplateMappingResolver();
+const templateRoles   = createHubSpotTemplateRolesResolver({ hubspot });
 
 const envelopesService = createEnvelopesService({ hubspot, docusign, templateMapping });
 fastify.decorate('envelopesService', envelopesService);
@@ -192,7 +195,7 @@ Uso: `request.log.info({ dealId, envelopeId }, 'envelope sent')`. El primer argu
 
 ## Testing
 
-- **154 tests unitarios** en 17 test suites. Cubren: services, controllers, adapters (HubSpot, DocuSign, Files), y lib (HMAC, tenant config, template mapping/roles).
+- **222 tests unitarios** en 19 test suites. Cubren: services, controllers, adapters (HubSpot, DocuSign, Files), y lib (HMAC, tenant config, template mapping/roles).
 - Adapters falsos pasados por DI (esa es la razón por la que existe DI suave).
 - **Sin nock/msw, sin smoke E2E automatizado** (Roadmap §16.10). Smoke tests manuales con curls validados.
 - Type checking obligatorio: `npm run typecheck` antes de commit.
@@ -218,10 +221,14 @@ DOCUSIGN_PRIVATE_KEY=
 DOCUSIGN_ACCOUNT_ID=
 DOCUSIGN_BASE_PATH=https://demo.docusign.net
 
-# Config de proveedores por template (array JSON):
-# [{"id":"<template-uuid>","country":"<país proveedor / tab countryINVE>","legalRepresentativeCode":"<hs-contact-id>","cmIdHubspotCode":"<hs-contact-id del CM>"}]
-# cmIdHubspotCode alimenta el rol CM (routingOrder 1). Vacío → 422 CM_NOT_CONFIGURED al enviar.
-TEMPLATE_PROVEEDOR_MAP=[]
+# Configuración de firmantes por template: objeto personalizado "Parametros DC"
+# de HubSpot. Aquí solo va su objectTypeId (específico de cada portal).
+# Propiedades de cada fila:
+#   pais → tab countryINVE | template (select, value = templateId de DocuSign)
+#   legal_representative_code → Proveedor | cm_id_hubspot_code → CM
+#   usuario_legal → Legal   (los tres son hs_object_id de contactos)
+# Vacío en la fila → 422 PROVEEDOR/CM/LEGAL_NOT_CONFIGURED al enviar.
+HUBSPOT_PARAMETROS_DC_OBJECT_TYPE=2-68469940
 
 # DocuSign Connect webhook HMAC secret (generado por DocuSign Admin → Connect → Gestionar claves)
 DOCUSIGN_CONNECT_HMAC_SECRET=
@@ -231,6 +238,32 @@ HUBSPOT_PORTAL_ID=
 ```
 
 Setup paso a paso de cuentas externas en spec §14 y §17.
+
+---
+
+---
+
+## Firmantes del envelope (5 roles)
+
+| routingOrder | `roleName` | Origen | Tabs |
+|---|---|---|---|
+| 1 | `Supervisor` | Deal, propiedad `supervisor` (tipo *Usuario de HubSpot* → `ownerId`, se resuelve con `/crm/v3/owners/{id}`) | no |
+| 2 | `CM` | Parametros DC → `cm_id_hubspot_code` (contactId) | sí |
+| 3 | `Legal` | Parametros DC → `usuario_legal` (contactId) | no |
+| 4 | `Proveedor` | Parametros DC → `legal_representative_code` (contactId) | sí |
+| 5 | `Cliente` | Contacto jurídico del Deal, o el `contactId` del request | no |
+
+- La fila de Parametros DC se busca por `template EQ <templateId>` con el search
+  API. Cero filas → `PROVEEDOR_NOT_CONFIGURED`; más de una → `PARAMETROS_DC_DUPLICATE`.
+- `pais` alimenta el tab `countryINVE` **normalizado**: `COUNTRY_ALIAS_MAP` en
+  `lib/team-country/` colapsa `Guatemala IV` / `Guatemala QST` → `Guatemala`.
+- Dos firmantes no pueden compartir email → `422 DUPLICATE_RECIPIENT_EMAIL`.
+- `getDealOwner` se sigue llamando **solo como guard** (`DEAL_OWNER_MISSING`); el
+  owner del Deal ya no firma.
+- Error codes nuevos: `DEAL_SUPERVISOR_MISSING`, `SUPERVISOR_NOT_FOUND`,
+  `SUPERVISOR_EMAIL_MISSING`, `LEGAL_NOT_CONFIGURED`, `LEGAL_EMAIL_MISSING`,
+  `PARAMETROS_DC_DUPLICATE`.
+
 
 ---
 

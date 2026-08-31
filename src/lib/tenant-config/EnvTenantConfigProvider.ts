@@ -9,6 +9,7 @@ export function createEnvTenantConfigProvider(env: Env): TenantConfigProvider {
   const config: TenantConfig = {
     hubspot: {
       accessToken: env.HUBSPOT_ACCESS_TOKEN,
+      parametrosDcObjectType: env.HUBSPOT_PARAMETROS_DC_OBJECT_TYPE,
     },
     docusign: {
       clientId: env.DOCUSIGN_CLIENT_ID,

@@ -1,7 +1,10 @@
 import { describe, expect, jest, test, afterEach } from '@jest/globals';
 import { createHubSpotAdapter } from '../hubspot.adapter.js';
 
-const adapter = createHubSpotAdapter({ accessToken: 'test-token' });
+const adapter = createHubSpotAdapter({
+  accessToken: 'test-token',
+  parametrosDcObjectType: '2-68469940',
+});
 
 function mockFetchSequence(responses: Array<{ status: number; body: unknown }>) {
   let call = 0;
@@ -604,6 +607,157 @@ describe('HubSpotAdapter.getDealOwner', () => {
     await expect(adapter.getDealOwner('d-1')).rejects.toMatchObject({
       code: 'OWNER_NOT_FOUND',
       httpStatus: 422,
+    });
+  });
+});
+
+describe('HubSpotAdapter.getDealSupervisor', () => {
+  test('happy path: lee la propiedad supervisor del Deal y resuelve el owner', async () => {
+    const calls: string[] = [];
+    jest.spyOn(global, 'fetch').mockImplementation((url) => {
+      calls.push(String(url));
+      const body =
+        calls.length === 1
+          ? { id: 'd-1', properties: { supervisor: '18811253' } }
+          : { id: 18811253, firstName: 'Jessica', lastName: 'Gonzalez', email: 'jessica@inve.com' };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(body),
+        text: () => Promise.resolve(''),
+      } as Response);
+    });
+
+    const supervisor = await adapter.getDealSupervisor('d-1');
+    expect(supervisor).toEqual({
+      id: '18811253',
+      name: 'Jessica Gonzalez',
+      email: 'jessica@inve.com',
+    });
+    expect(calls[0]).toContain('properties=supervisor');
+    expect(calls[1]).toContain('/crm/v3/owners/18811253');
+  });
+
+  test('lanza DEAL_SUPERVISOR_MISSING cuando el Deal no tiene supervisor', async () => {
+    mockFetchSequence([{ status: 200, body: { id: 'd-1', properties: { supervisor: null } } }]);
+
+    await expect(adapter.getDealSupervisor('d-1')).rejects.toMatchObject({
+      code: 'DEAL_SUPERVISOR_MISSING',
+      httpStatus: 422,
+    });
+  });
+
+  test('lanza SUPERVISOR_NOT_FOUND cuando el owner fue eliminado (404)', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { supervisor: '18811253' } } },
+      { status: 404, body: {} },
+    ]);
+
+    await expect(adapter.getDealSupervisor('d-1')).rejects.toMatchObject({
+      code: 'SUPERVISOR_NOT_FOUND',
+      httpStatus: 422,
+    });
+  });
+
+  test('lanza SUPERVISOR_EMAIL_MISSING cuando el owner no tiene email', async () => {
+    mockFetchSequence([
+      { status: 200, body: { id: 'd-1', properties: { supervisor: '18811253' } } },
+      { status: 200, body: { firstName: 'Jessica', lastName: 'Gonzalez', email: '' } },
+    ]);
+
+    await expect(adapter.getDealSupervisor('d-1')).rejects.toMatchObject({
+      code: 'SUPERVISOR_EMAIL_MISSING',
+      httpStatus: 422,
+    });
+  });
+
+  test('lanza DEAL_NOT_FOUND cuando el Deal no existe', async () => {
+    mockFetchSequence([{ status: 404, body: {} }]);
+
+    await expect(adapter.getDealSupervisor('d-nope')).rejects.toMatchObject({
+      code: 'DEAL_NOT_FOUND',
+      httpStatus: 404,
+    });
+  });
+});
+
+describe('HubSpotAdapter.getParametrosDcByTemplate', () => {
+  const row = {
+    id: '61130879017',
+    properties: {
+      pais: 'Costa Rica',
+      template: 'tpl-cr',
+      legal_representative_code: '228008555346',
+      cm_id_hubspot_code: '227829453070',
+      usuario_legal: '203298100366',
+    },
+  };
+
+  test('busca por la propiedad template y mapea la fila', async () => {
+    let captured: { url: string; body: unknown } | null = null;
+    jest.spyOn(global, 'fetch').mockImplementation((url, init) => {
+      captured = { url: String(url), body: JSON.parse(String((init as RequestInit).body)) };
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ total: 1, results: [row] }),
+        text: () => Promise.resolve(''),
+      } as Response);
+    });
+
+    const result = await adapter.getParametrosDcByTemplate('tpl-cr');
+
+    expect(result).toEqual({
+      recordId: '61130879017',
+      pais: 'Costa Rica',
+      templateId: 'tpl-cr',
+      legalRepresentativeCode: '228008555346',
+      cmIdHubspotCode: '227829453070',
+      usuarioLegal: '203298100366',
+    });
+    const sent = captured as unknown as { url: string; body: Record<string, unknown> };
+    expect(sent.url).toContain('/crm/v3/objects/2-68469940/search');
+    expect(sent.body.filterGroups).toEqual([
+      { filters: [{ propertyName: 'template', operator: 'EQ', value: 'tpl-cr' }] },
+    ]);
+  });
+
+  test('retorna null cuando no hay fila para ese template', async () => {
+    mockFetchSequence([{ status: 200, body: { total: 0, results: [] } }]);
+    await expect(adapter.getParametrosDcByTemplate('tpl-sin-fila')).resolves.toBeNull();
+  });
+
+  test('lanza PARAMETROS_DC_DUPLICATE cuando hay más de una fila', async () => {
+    mockFetchSequence([
+      { status: 200, body: { total: 2, results: [row, { ...row, id: '999' }] } },
+    ]);
+
+    await expect(adapter.getParametrosDcByTemplate('tpl-cr')).rejects.toMatchObject({
+      code: 'PARAMETROS_DC_DUPLICATE',
+      httpStatus: 422,
+    });
+  });
+
+  test('tolera propiedades vacías o ausentes', async () => {
+    mockFetchSequence([
+      { status: 200, body: { total: 1, results: [{ id: 'r-1', properties: { pais: '  Honduras  ' } }] } },
+    ]);
+
+    await expect(adapter.getParametrosDcByTemplate('tpl-hn')).resolves.toEqual({
+      recordId: 'r-1',
+      pais: 'Honduras',
+      templateId: 'tpl-hn',
+      legalRepresentativeCode: '',
+      cmIdHubspotCode: '',
+      usuarioLegal: '',
+    });
+  });
+
+  test('lanza HUBSPOT_UNAVAILABLE en 500', async () => {
+    mockFetchSequence([{ status: 500, body: {} }]);
+    await expect(adapter.getParametrosDcByTemplate('tpl-cr')).rejects.toMatchObject({
+      code: 'HUBSPOT_UNAVAILABLE',
+      httpStatus: 502,
     });
   });
 });

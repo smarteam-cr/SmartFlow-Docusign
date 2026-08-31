@@ -13,6 +13,15 @@ const HUBSPOT_TIMEOUT_MS = 10_000;
  */
 export const MAX_CAPEX_PER_DEAL = 5;
 
+/** Propiedades que se leen del objeto personalizado "Parametros DC". */
+const PARAMETROS_DC_PROPERTIES = [
+  'pais',
+  'template',
+  'legal_representative_code',
+  'cm_id_hubspot_code',
+  'usuario_legal',
+] as const;
+
 export interface Contact {
   id: string;
   firstName: string;
@@ -56,6 +65,26 @@ export interface Quote {
   hsQuoteLink: string;
 }
 
+/**
+ * Fila del objeto personalizado "Parametros DC" de HubSpot: la configuración
+ * de firmantes fijos de un template DocuSign. Sustituye al viejo
+ * TEMPLATE_PROVEEDOR_MAP del .env.
+ */
+export interface ParametrosDc {
+  /** hs_object_id de la fila. */
+  recordId: string;
+  /** Propiedad `pais` — valor crudo, sin normalizar ("Guatemala IV"). */
+  pais: string;
+  /** Propiedad `template` — el value de la opción ES el templateId de DocuSign. */
+  templateId: string;
+  /** Propiedad `legal_representative_code` — contactId del Proveedor. */
+  legalRepresentativeCode: string;
+  /** Propiedad `cm_id_hubspot_code` — contactId del CM. */
+  cmIdHubspotCode: string;
+  /** Propiedad `usuario_legal` — contactId del rol Legal. */
+  usuarioLegal: string;
+}
+
 export interface HubSpotAdapter {
   /**
    * Returns all contacts associated to a Deal that have a non-empty email.
@@ -89,8 +118,21 @@ export interface HubSpotAdapter {
   getDealOwner(dealId: string): Promise<DealOwner>;
 
   /**
+   * Returns the HubSpot Owner set in the Deal's `supervisor` property (a
+   * "Usuario de HubSpot" field, so it stores an ownerId — not a contactId).
+   * First signer of the envelope (routingOrder 1).
+   *
+   * @throws NotFoundError(DEAL_NOT_FOUND) if dealId doesn't exist
+   * @throws ValidationError(DEAL_SUPERVISOR_MISSING) if the Deal has no supervisor
+   * @throws ValidationError(SUPERVISOR_NOT_FOUND) if the owner was deleted/deactivated
+   * @throws ValidationError(SUPERVISOR_EMAIL_MISSING) if the owner has no email
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getDealSupervisor(dealId: string): Promise<DealOwner>;
+
+  /**
    * Reads a single contact by id (used to resolve the Proveedor contact
-   * configured in TEMPLATE_PROVEEDOR_MAP). Returns the Contact shape — the
+   * configured in "Parametros DC"). Returns the Contact shape — the
    * email may be empty; the email-required validation is the caller's job.
    *
    * @throws ValidationError(PROVEEDOR_CONTACT_NOT_FOUND) on 404
@@ -147,10 +189,25 @@ export interface HubSpotAdapter {
     contactIds?: string[];
     attachmentIds?: string[];
   }): Promise<{ noteId: string }>;
+
+  /**
+   * Returns the "Parametros DC" row configured for a DocuSign template, or
+   * null when no row matches. This is the source of the Proveedor, CM and
+   * Legal signers (it replaced the TEMPLATE_PROVEEDOR_MAP env var).
+   *
+   * @throws ValidationError(PARAMETROS_DC_DUPLICATE) if more than one row matches
+   * @throws ExternalServiceError(HUBSPOT_UNAVAILABLE)
+   */
+  getParametrosDcByTemplate(templateId: string): Promise<ParametrosDc | null>;
 }
 
 export interface HubSpotAdapterConfig {
   accessToken: string;
+  /**
+   * objectTypeId del objeto personalizado "Parametros DC" (ej. "2-68469940").
+   * Es específico de cada portal, por eso viene de env y no hardcodeado.
+   */
+  parametrosDcObjectType: string;
 }
 
 export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapter {
@@ -239,6 +296,97 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       results?: Array<{ id?: string; properties?: Record<string, string | undefined> }>;
     };
     return body.results ?? [];
+  }
+
+  /**
+   * Reads a HubSpot owner ("Usuario de HubSpot") and validates it has an email.
+   * Shared by getDealOwner and getDealSupervisor — they differ only in which
+   * error codes surface, so the caller passes them in.
+   */
+  async function fetchOwner(
+    ownerId: string,
+    codes: { notFound: string; emailMissing: string },
+    errorContext: Record<string, unknown>
+  ): Promise<DealOwner> {
+    const url = `${HUBSPOT_BASE_URL}/crm/v3/owners/${encodeURIComponent(ownerId)}`;
+    const res = await hubspotFetch(url);
+
+    if (res.status === 404) {
+      throw new ValidationError(
+        codes.notFound,
+        `El usuario de HubSpot ${ownerId} fue eliminado o desactivado`,
+        { ...errorContext, ownerId }
+      );
+    }
+    if (!res.ok) {
+      throw new ExternalServiceError(
+        'HUBSPOT_UNAVAILABLE',
+        `HubSpot respondió ${res.status} al leer el owner ${ownerId}`,
+        { ...errorContext, ownerId, status: res.status }
+      );
+    }
+
+    const body = (await res.json()) as {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+    };
+
+    const email = body.email?.trim() ?? '';
+    if (!email) {
+      throw new ValidationError(
+        codes.emailMissing,
+        `El usuario de HubSpot ${ownerId} no tiene email configurado`,
+        { ...errorContext, ownerId }
+      );
+    }
+
+    return {
+      id: ownerId,
+      name: `${body.firstName ?? ''} ${body.lastName ?? ''}`.trim(),
+      email,
+    };
+  }
+
+  /**
+   * Reads one owner-typed property off a Deal (hubspot_owner_id, supervisor…)
+   * and resolves it to the full owner. Both properties store an ownerId.
+   */
+  async function fetchDealOwnerByProperty(
+    dealId: string,
+    property: string,
+    codes: { missing: string; missingMessage: string; notFound: string; emailMissing: string }
+  ): Promise<DealOwner> {
+    const dealUrl =
+      `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}` +
+      `?properties=${encodeURIComponent(property)}`;
+    const dealRes = await hubspotFetch(dealUrl);
+
+    if (dealRes.status === 404) {
+      throw new NotFoundError('DEAL_NOT_FOUND', `Deal ${dealId} no existe en HubSpot`, { dealId });
+    }
+    if (!dealRes.ok) {
+      throw new ExternalServiceError(
+        'HUBSPOT_UNAVAILABLE',
+        `HubSpot respondió ${dealRes.status} al leer ${property} del Deal`,
+        { dealId, property, status: dealRes.status }
+      );
+    }
+
+    const dealBody = (await dealRes.json()) as {
+      properties?: Record<string, string | null | undefined>;
+    };
+
+    const ownerId = dealBody.properties?.[property]?.trim();
+    if (!ownerId) {
+      throw new ValidationError(codes.missing, codes.missingMessage, { dealId, property });
+    }
+
+    return fetchOwner(
+      ownerId,
+      { notFound: codes.notFound, emailMissing: codes.emailMissing },
+      { dealId, property }
+    );
   }
 
   return {
@@ -339,71 +487,21 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
     },
 
     async getDealOwner(dealId: string): Promise<DealOwner> {
-      const dealUrl =
-        `${HUBSPOT_BASE_URL}/crm/v3/objects/deals/${encodeURIComponent(dealId)}` +
-        `?properties=hubspot_owner_id`;
-      const dealRes = await hubspotFetch(dealUrl);
+      return fetchDealOwnerByProperty(dealId, 'hubspot_owner_id', {
+        missing: 'DEAL_OWNER_MISSING',
+        missingMessage: `El Deal ${dealId} no tiene propietario asignado en HubSpot`,
+        notFound: 'OWNER_NOT_FOUND',
+        emailMissing: 'OWNER_EMAIL_MISSING',
+      });
+    },
 
-      if (dealRes.status === 404) {
-        throw new NotFoundError('DEAL_NOT_FOUND', `Deal ${dealId} no existe en HubSpot`, { dealId });
-      }
-      if (!dealRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${dealRes.status} al leer owner del Deal`,
-          { dealId, status: dealRes.status }
-        );
-      }
-
-      const dealBody = (await dealRes.json()) as {
-        properties?: { hubspot_owner_id?: string | null };
-      };
-
-      const ownerId = dealBody.properties?.hubspot_owner_id?.trim();
-      if (!ownerId) {
-        throw new ValidationError(
-          'DEAL_OWNER_MISSING',
-          `El Deal ${dealId} no tiene propietario asignado en HubSpot`,
-          { dealId }
-        );
-      }
-
-      const ownerUrl = `${HUBSPOT_BASE_URL}/crm/v3/owners/${encodeURIComponent(ownerId)}`;
-      const ownerRes = await hubspotFetch(ownerUrl);
-
-      if (ownerRes.status === 404) {
-        throw new ValidationError(
-          'OWNER_NOT_FOUND',
-          `El propietario ${ownerId} asignado al Deal ${dealId} fue eliminado o desactivado en HubSpot`,
-          { dealId, ownerId }
-        );
-      }
-      if (!ownerRes.ok) {
-        throw new ExternalServiceError(
-          'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${ownerRes.status} al leer el owner ${ownerId}`,
-          { dealId, ownerId, status: ownerRes.status }
-        );
-      }
-
-      const ownerBody = (await ownerRes.json()) as {
-        id?: string | number;
-        firstName?: string;
-        lastName?: string;
-        email?: string;
-      };
-
-      const email = ownerBody.email?.trim() ?? '';
-      if (!email) {
-        throw new ValidationError(
-          'OWNER_EMAIL_MISSING',
-          `El propietario ${ownerId} del Deal ${dealId} no tiene email configurado`,
-          { dealId, ownerId }
-        );
-      }
-
-      const name = `${ownerBody.firstName ?? ''} ${ownerBody.lastName ?? ''}`.trim();
-      return { id: String(ownerId), name, email };
+    async getDealSupervisor(dealId: string): Promise<DealOwner> {
+      return fetchDealOwnerByProperty(dealId, 'supervisor', {
+        missing: 'DEAL_SUPERVISOR_MISSING',
+        missingMessage: `El Deal ${dealId} no tiene supervisor asignado — es el primer firmante del contrato`,
+        notFound: 'SUPERVISOR_NOT_FOUND',
+        emailMissing: 'SUPERVISOR_EMAIL_MISSING',
+      });
     },
 
     async getContactById(contactId: string): Promise<Contact> {
@@ -415,14 +513,14 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
       if (res.status === 404) {
         throw new ValidationError(
           'PROVEEDOR_CONTACT_NOT_FOUND',
-          `El contacto proveedor ${contactId} no existe en HubSpot (revisa TEMPLATE_PROVEEDOR_MAP)`,
+          `El contacto ${contactId} configurado en "Parametros DC" no existe en HubSpot`,
           { contactId }
         );
       }
       if (!res.ok) {
         throw new ExternalServiceError(
           'HUBSPOT_UNAVAILABLE',
-          `HubSpot respondió ${res.status} al leer el contacto proveedor ${contactId}`,
+          `HubSpot respondió ${res.status} al leer el contacto ${contactId}`,
           { contactId, status: res.status }
         );
       }
@@ -584,6 +682,58 @@ export function createHubSpotAdapter(config: HubSpotAdapterConfig): HubSpotAdapt
         }
       }
       return [...ids];
+    },
+
+
+    async getParametrosDcByTemplate(templateId: string): Promise<ParametrosDc | null> {
+      const objectType = config.parametrosDcObjectType;
+      const url = `${HUBSPOT_BASE_URL}/crm/v3/objects/${encodeURIComponent(objectType)}/search`;
+      // Nota: el índice de búsqueda de HubSpot es eventualmente consistente —
+      // un cambio recién guardado en la UI puede tardar unos segundos en verse.
+      const res = await hubspotFetch(url, {
+        method: 'POST',
+        body: JSON.stringify({
+          filterGroups: [
+            { filters: [{ propertyName: 'template', operator: 'EQ', value: templateId }] },
+          ],
+          properties: PARAMETROS_DC_PROPERTIES,
+          limit: 2,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new ExternalServiceError(
+          'HUBSPOT_UNAVAILABLE',
+          `HubSpot respondió ${res.status} al buscar la configuración "Parametros DC" del template ${templateId}`,
+          { templateId, objectType, status: res.status }
+        );
+      }
+
+      const body = (await res.json()) as {
+        total?: number;
+        results?: Array<{ id?: string; properties?: Record<string, string | null | undefined> }>;
+      };
+
+      const results = body.results ?? [];
+      if (results.length === 0) return null;
+      if (results.length > 1) {
+        throw new ValidationError(
+          'PARAMETROS_DC_DUPLICATE',
+          `Hay ${body.total ?? results.length} filas de "Parametros DC" para el template ${templateId}; debe haber exactamente una`,
+          { templateId, recordIds: results.map((r) => r.id ?? '') }
+        );
+      }
+
+      const row = results[0]!;
+      const props = row.properties ?? {};
+      return {
+        recordId: row.id ?? '',
+        pais: props.pais?.trim() ?? '',
+        templateId: props.template?.trim() ?? templateId,
+        legalRepresentativeCode: props.legal_representative_code?.trim() ?? '',
+        cmIdHubspotCode: props.cm_id_hubspot_code?.trim() ?? '',
+        usuarioLegal: props.usuario_legal?.trim() ?? '',
+      };
     },
 
     async getDealProperties(dealId: string, properties: string[]): Promise<Record<string, string>> {

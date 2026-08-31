@@ -6,6 +6,8 @@
 export interface TenantConfig {
   hubspot: {
     accessToken: string;
+    /** objectTypeId de "Parametros DC" (config de firmantes por template). */
+    parametrosDcObjectType: string;
   };
   docusign: {
     clientId: string;
